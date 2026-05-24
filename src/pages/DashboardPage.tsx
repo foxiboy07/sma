@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageSquare, Zap, Users, DollarSign, TrendingUp,
   AlertTriangle, Brain, ArrowRight, Plus, TestTube2,
-  Megaphone, UserPlus, CheckCircle2
+  Megaphone, UserPlus, CheckCircle2, Bell
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { MetricCard, Card, Badge, Button, PlatformIcon, LoyaltyBadge, Skeleton } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
+import { useNotificationsRealtime } from '../hooks/useRealtime';
 import { supabase } from '../lib/supabase';
 import { ConnectedAccount, Flow } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -69,6 +70,88 @@ export function DashboardPage() {
     aiCreditsSaved: '$0.00',
     cacheHitRate: '0%',
   });
+
+  // Refresh function to reload dashboard data
+  const refreshData = useCallback(() => {
+    if (!tenant?.id) return;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    Promise.all([
+      supabase.from('conversations')
+        .select('id, platform, created_at, unified_contacts(display_name)')
+        .eq('tenant_id', tenant.id)
+        .eq('priority_red', true)
+        .neq('status', 'CLOSED')
+        .order('created_at', { ascending: true })
+        .limit(5),
+
+      supabase.from('ai_audit_logs')
+        .select('id, contact_id, intent_classified, model_tier, estimated_cost_usd, flow_id, unified_contacts(display_name)')
+        .eq('tenant_id', tenant.id)
+        .order('created_at', { ascending: false })
+        .limit(5),
+
+      supabase.from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant.id)
+        .eq('direction', 'OUTBOUND')
+        .gte('created_at', todayStart),
+
+      supabase.from('conversations')
+        .select('status, priority_red')
+        .eq('tenant_id', tenant.id)
+        .gte('last_message_at', twentyFourHoursAgo),
+    ]).then(([priorityRedRes, aiDecisionsRes, dmsRes, conversationsRes]) => {
+      const prData = (priorityRedRes.data || []).map((c: any) => {
+        const created = c.created_at ? new Date(c.created_at) : now;
+        const waitingMin = Math.max(1, Math.round((now.getTime() - created.getTime()) / 60000));
+        return {
+          id: c.id,
+          name: c.unified_contacts?.display_name || 'Unknown',
+          platform: c.platform,
+          waitingMin,
+        };
+      });
+      setPriorityRed(prData);
+
+      const aiData = (aiDecisionsRes.data || []).map((log: any) => ({
+        contact: log.unified_contacts?.display_name || 'Unknown',
+        intent: log.intent_classified || 'N/A',
+        tier: log.model_tier || 'TIER_1',
+        cost: log.estimated_cost_usd?.toFixed(4) || '0.0000',
+        flowId: log.flow_id || '',
+      }));
+      setAiDecisions(aiData);
+
+      const dmsSentToday = dmsRes.count || 0;
+      const convs = conversationsRes.data || [];
+      const conversationsBot = convs.filter((c: any) => c.status === 'BOT').length;
+      const conversationsHuman = convs.filter((c: any) => c.status === 'HUMAN').length;
+      const conversationsRed = convs.filter((c: any) => c.priority_red === true).length;
+
+      setMetrics(prev => ({
+        ...prev,
+        dmsSentToday,
+        conversationsBot,
+        conversationsHuman,
+        conversationsRed,
+      }));
+    });
+  }, [tenant?.id]);
+
+  // Realtime notifications subscription
+  useNotificationsRealtime(
+    tenant?.id || null,
+    user?.id,
+    () => {
+      // Refresh data when notifications arrive
+      refreshData();
+    }
+  );
 
   useEffect(() => {
     if (!tenant?.id) { setLoading(false); return; }

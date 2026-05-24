@@ -25,6 +25,10 @@ export function useToast() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const show = useCallback((options: { type: Toast['type']; title: string; description?: string; duration?: number }) => {
+    return addToast(options);
+  }, [addToast]);
+
   const toast = {
     success: (title: string, description?: string) => addToast({ type: 'success', title, description }),
     error: (title: string, description?: string) => addToast({ type: 'error', title, description }),
@@ -32,5 +36,5 @@ export function useToast() {
     info: (title: string, description?: string) => addToast({ type: 'info', title, description }),
   };
 
-  return { toasts, toast, removeToast };
+  return { toasts, toast, show, removeToast };
 }
