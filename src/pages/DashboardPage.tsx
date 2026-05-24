@@ -321,12 +321,12 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-4 md:p-6 space-y-6 max-w-[1400px]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#F0F2FF]">{greeting}, {firstName}</h1>
-          <p className="text-sm text-[#8B90A7]">{format(new Date(), 'MMMM d, yyyy')} · Last updated just now</p>
+          <h1 className="text-lg md:text-xl font-bold text-[#F0F2FF]">{greeting}, {firstName}</h1>
+          <p className="text-xs md:text-sm text-[#8B90A7]">{format(new Date(), 'MMMM d, yyyy')} · Last updated just now</p>
         </div>
         <div className="flex gap-2">
           {(['24h', '7d', '30d'] as const).map(p => (
@@ -343,11 +343,11 @@ export function DashboardPage() {
 
       {/* Metric Row */}
       {loading ? (
-        <div className="grid grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 md:h-28" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <MetricCard
             label="DMs Sent Today"
             value={metrics.dmsSentToday.toLocaleString()}
@@ -361,9 +361,9 @@ export function DashboardPage() {
             iconColor="text-amber-400"
           />
           <MetricCard
-            label="Conversations (24h)"
+            label="Conversations"
             value={metrics.conversationsBot + metrics.conversationsHuman}
-            subtitle={`Bot: ${metrics.conversationsBot} · Human: ${metrics.conversationsHuman} · Red: ${metrics.conversationsRed}`}
+            subtitle={`Bot: ${metrics.conversationsBot} · Human: ${metrics.conversationsHuman}`}
             icon={<Users className="w-4 h-4" />}
             iconColor="text-green-400"
           />
@@ -373,18 +373,17 @@ export function DashboardPage() {
             change={{ value: metrics.cacheHitRate, positive: true }}
             icon={<Brain className="w-4 h-4" />}
             iconColor="text-cyan-400"
-            subtitle="vs flat-rate messaging"
           />
         </div>
       )}
 
       {/* Charts Row */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* Activity Chart */}
-        <Card className="col-span-3">
+        <Card className="col-span-1 lg:col-span-3">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-[#F0F2FF]">Activity Timeline</h2>
-            <div className="flex items-center gap-4 text-xs text-[#8B90A7]">
+            <div className="hidden sm:flex items-center gap-4 text-xs text-[#8B90A7]">
               <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-blue-400 inline-block" /> Messages</span>
               <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-green-400 inline-block" /> Revenue ($)</span>
             </div>
@@ -412,11 +411,11 @@ export function DashboardPage() {
         </Card>
 
         {/* Platform Health */}
-        <Card className="col-span-2">
+        <Card className="col-span-1 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-[#F0F2FF]">Platform Health</h2>
             <button onClick={() => navigate('/health')} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-              View all <ArrowRight className="w-3 h-3" />
+              View <ArrowRight className="w-3 h-3" />
             </button>
           </div>
           <div className="space-y-3">
@@ -449,13 +448,13 @@ export function DashboardPage() {
       </div>
 
       {/* Third Row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Top Flows */}
         <Card>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-[#F0F2FF]">Top Flows</h2>
             <button onClick={() => navigate('/flows')} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-              View all <ArrowRight className="w-3 h-3" />
+              View <ArrowRight className="w-3 h-3" />
             </button>
           </div>
           <div className="space-y-3">
@@ -525,7 +524,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-[#F0F2FF]">Recent AI Decisions</h2>
             <button onClick={() => navigate('/audit')} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-              View audit log <ArrowRight className="w-3 h-3" />
+              View <ArrowRight className="w-3 h-3" />
             </button>
           </div>
           <div className="space-y-3">
@@ -550,7 +549,7 @@ export function DashboardPage() {
       {/* Quick Actions */}
       <div>
         <h2 className="text-sm font-semibold text-[#F0F2FF] mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'Create Flow', icon: <Zap className="w-4 h-4" />, action: () => navigate('/flows'), primary: true },
             { label: 'New Broadcast', icon: <Megaphone className="w-4 h-4" />, action: () => navigate('/broadcasts') },
@@ -560,9 +559,9 @@ export function DashboardPage() {
             <button
               key={item.label}
               onClick={item.action}
-              className={`flex items-center gap-3 p-4 rounded-xl border transition-all duration-150 ${
+              className={`flex items-center gap-3 p-4 rounded-xl border transition-all duration-150 active:scale-[0.98] ${
                 item.primary
-                  ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20'
+                  ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 active:bg-blue-500/25'
                   : 'bg-[#1A1C24] border-[#2A2E42] text-[#8B90A7] hover:bg-[#222530] hover:text-[#F0F2FF]'
               }`}
             >

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Bell, HelpCircle, ChevronDown, User, LogOut, Keyboard, Settings, Sparkles, X, Check, ExternalLink } from 'lucide-react';
+import { Search, Bell, HelpCircle, ChevronDown, User, LogOut, Keyboard, Settings, Sparkles, X, Check, ExternalLink, Menu } from 'lucide-react';
 import { Dropdown } from '../ui';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
@@ -18,9 +18,10 @@ interface Notification {
 
 interface TopbarProps {
   onCommandPalette?: () => void;
+  onMenuClick?: () => void;
 }
 
-export function Topbar({ onCommandPalette }: TopbarProps) {
+export function Topbar({ onCommandPalette, onMenuClick }: TopbarProps) {
   const { user, tenant, brand, signOut } = useAuth();
   const [searchFocused, setSearchFocused] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -91,13 +92,29 @@ export function Topbar({ onCommandPalette }: TopbarProps) {
   };
 
   return (
-    <header className="h-13 flex items-center justify-between px-4 bg-[#111318] border-b border-[#1E2130] flex-shrink-0 z-30" style={{ height: 52 }}>
-      {/* Left: Brand switcher + breadcrumb */}
+    <header className="h-14 flex items-center justify-between px-4 bg-[#111318] border-b border-[#1E2130] flex-shrink-0 z-30 safe-area-inset-top">
+      {/* Left: Mobile menu + Brand */}
       <div className="flex items-center gap-3">
+        {/* Mobile Menu Button */}
+        <button
+          onClick={onMenuClick}
+          className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] active:bg-[#222530] transition-colors md:hidden"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        {/* Mobile Logo */}
+        <div className="flex items-center gap-2 md:hidden">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-white" />
+          </div>
+        </div>
+
+        {/* Desktop Brand Switcher */}
         {brand && (
           <Dropdown
             trigger={
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#1A1C24] border border-[#2A2E42] hover:bg-[#222530] transition-colors">
+              <button className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#1A1C24] border border-[#2A2E42] hover:bg-[#222530] transition-colors">
                 <div className="w-5 h-5 rounded bg-gradient-to-br from-blue-500 to-cyan-400 flex-shrink-0" />
                 <span className="text-sm font-medium text-[#F0F2FF] max-w-[120px] truncate">{brand.name}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-[#4B5068]" />
@@ -113,8 +130,8 @@ export function Topbar({ onCommandPalette }: TopbarProps) {
         )}
       </div>
 
-      {/* Center: Global search */}
-      <div className="flex-1 max-w-xs mx-4">
+      {/* Center: Global search (hidden on mobile) */}
+      <div className="flex-1 max-w-xs mx-4 hidden md:block">
         <button
           onClick={onCommandPalette}
           className={`w-full flex items-center gap-2 h-8 px-3 rounded-lg text-sm transition-all border ${searchFocused ? 'border-blue-500 bg-[#1A1C24]' : 'border-[#2A2E42] bg-[#1A1C24] hover:bg-[#222530]'}`}
@@ -129,7 +146,15 @@ export function Topbar({ onCommandPalette }: TopbarProps) {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-1">
-        <button className="relative w-8 h-8 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] hover:text-[#F0F2FF] transition-colors">
+        {/* Mobile Search Button */}
+        <button
+          onClick={onCommandPalette}
+          className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] active:bg-[#222530] transition-colors md:hidden"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+
+        <button className="relative w-9 h-9 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] active:bg-[#222530] transition-colors hidden md:flex">
           <Sparkles className="w-4 h-4" />
           <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-400 rounded-full" />
         </button>
@@ -138,11 +163,11 @@ export function Topbar({ onCommandPalette }: TopbarProps) {
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative w-8 h-8 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] hover:text-[#F0F2FF] transition-colors"
+            className="relative w-9 h-9 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] active:bg-[#222530] transition-colors"
           >
-            <Bell className="w-4 h-4" />
+            <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+              <span className="absolute top-0.5 right-0.5 min-w-[18px] h-4.5 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
@@ -225,13 +250,13 @@ export function Topbar({ onCommandPalette }: TopbarProps) {
           )}
         </div>
 
-        <button className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] hover:text-[#F0F2FF] transition-colors">
+        <button className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8B90A7] hover:bg-[#1A1C24] active:bg-[#222530] transition-colors hidden md:flex">
           <HelpCircle className="w-4 h-4" />
         </button>
 
         <Dropdown
           trigger={
-            <button className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold hover:opacity-90 transition-opacity ml-1">
+            <button className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold hover:opacity-90 active:opacity-80 transition-opacity ml-1">
               {user?.email?.charAt(0).toUpperCase() || 'U'}
             </button>
           }

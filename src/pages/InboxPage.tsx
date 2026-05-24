@@ -451,17 +451,17 @@ export function InboxPage() {
   return (
     <div className="flex h-full bg-[#0A0B0F]">
       {/* Left: Conversation List */}
-      <div className="w-72 flex flex-col border-r border-[#1E2130] bg-[#111318] flex-shrink-0">
+      <div className={`w-full md:w-72 flex flex-col border-r border-[#1E2130] bg-[#111318] flex-shrink-0 ${activeConv ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 border-b border-[#1E2130]">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-sm font-semibold text-[#F0F2FF]">Inbox</h1>
+            <h1 className="text-base md:text-sm font-semibold text-[#F0F2FF]">Inbox</h1>
             <div className="flex items-center gap-1">
-              <button className="w-7 h-7 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><Filter className="w-3.5 h-3.5" /></button>
+              <button className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] active:bg-[#222530]"><Filter className="w-4 h-4 md:w-3.5 md:h-3.5" /></button>
             </div>
           </div>
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#4B5068]" />
-            <input placeholder="Search conversations..." className="w-full h-8 pl-8 pr-3 rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] placeholder:text-[#4B5068] focus:outline-none focus:border-blue-500" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 md:w-3.5 md:h-3.5 text-[#4B5068]" />
+            <input placeholder="Search conversations..." className="w-full h-9 md:h-8 pl-9 md:pl-8 pr-3 rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm md:text-xs text-[#F0F2FF] placeholder:text-[#4B5068] focus:outline-none focus:border-blue-500" />
           </div>
         </div>
 
@@ -479,14 +479,14 @@ export function InboxPage() {
         </div>
 
         {/* Platform filter */}
-        <div className="flex gap-1 px-2 py-1.5 border-b border-[#1E2130]">
+        <div className="flex gap-1 px-2 py-1.5 border-b border-[#1E2130] overflow-x-auto">
           {['INSTAGRAM', 'FACEBOOK', 'TIKTOK'].map(p => (
             <button
               key={p}
               onClick={() => setPlatformFilter(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
-              className={`flex items-center gap-1 px-1.5 py-1 rounded text-[10px] transition-colors ${platformFilter.includes(p) ? 'bg-blue-500/20 text-blue-400' : 'text-[#4B5068] hover:text-[#F0F2FF]'}`}
+              className={`flex items-center gap-1 px-2 py-1.5 md:px-1.5 md:py-1 rounded text-xs md:text-[10px] transition-colors active:scale-95 ${platformFilter.includes(p) ? 'bg-blue-500/20 text-blue-400' : 'text-[#4B5068] hover:text-[#F0F2FF]'}`}
             >
-              <PlatformIcon platform={p} size={12} />
+              <PlatformIcon platform={p} size={14} className="md:!w-3 md:!h-3" />
             </button>
           ))}
         </div>
@@ -518,30 +518,37 @@ export function InboxPage() {
       </div>
 
       {/* Center: Thread */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 ${!activeConv ? 'hidden md:flex' : 'flex'}`}>
         {activeConv ? (
           <>
             {/* Thread Header */}
-            <div className="h-12 flex items-center justify-between px-4 border-b border-[#1E2130] bg-[#111318] flex-shrink-0">
-              <div className="flex items-center gap-3">
+            <div className="h-14 md:h-12 flex items-center justify-between px-3 md:px-4 border-b border-[#1E2130] bg-[#111318] flex-shrink-0 safe-area-inset-top">
+              <div className="flex items-center gap-2 md:gap-3">
+                {/* Back button on mobile */}
+                <button
+                  onClick={() => setActiveConv(null)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] md:hidden"
+                >
+                  <ChevronRight className="w-5 h-5 rotate-180" />
+                </button>
                 <div className="flex items-center gap-2">
-                  <PlatformIcon platform={activeConv.platform} size={16} />
-                  <span className="text-sm font-semibold text-[#F0F2FF]">{activeConvName}</span>
-                  <Badge variant={activeConv.status === 'BOT' ? 'info' : activeConv.status === 'HUMAN' ? 'success' : 'default'} className="text-[10px]">
+                  <PlatformIcon platform={activeConv.platform} size={18} className="md:!w-4 md:!h-4" />
+                  <span className="text-base md:text-sm font-semibold text-[#F0F2FF]">{activeConvName}</span>
+                  <Badge variant={activeConv.status === 'BOT' ? 'info' : activeConv.status === 'HUMAN' ? 'success' : 'default'} className="text-[10px] hidden sm:inline-flex">
                     {activeConv.status}
                   </Badge>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="hidden md:flex items-center gap-2">
                   <span className="text-xs text-[#8B90A7]">{humanMode ? 'Human mode — bot paused' : 'Bot active'}</span>
                   <Toggle checked={humanMode} onChange={handleHumanModeToggle} size="sm" />
                 </div>
-                <button onClick={() => setShowContactPanel(p => !p)} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]">
-                  <User className="w-3.5 h-3.5" />
+                <button onClick={() => setShowContactPanel(p => !p)} className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] active:bg-[#222530]">
+                  <User className="w-5 h-5 md:w-3.5 md:h-3.5" />
                 </button>
-                <button className="w-7 h-7 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]">
-                  <MoreVertical className="w-3.5 h-3.5" />
+                <button className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] active:bg-[#222530]">
+                  <MoreVertical className="w-5 h-5 md:w-3.5 md:h-3.5" />
                 </button>
               </div>
             </div>
@@ -556,7 +563,7 @@ export function InboxPage() {
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
               <div className="flex justify-center mb-2">
                 <span className="text-[10px] text-[#4B5068] bg-[#111318] px-3 py-1 rounded-full border border-[#1E2130]">Today</span>
               </div>
@@ -577,15 +584,15 @@ export function InboxPage() {
                     )}
                     <div className={`max-w-[60%] ${msg.direction === 'OUTBOUND' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
                       {msg.message_type === 'PRODUCT_CARD' ? (
-                        <div className="rounded-2xl rounded-tr-sm bg-[#1A1C24] border border-[#2A2E42] p-3 w-56">
+                        <div className="rounded-2xl rounded-tr-sm bg-[#1A1C24] border border-[#2A2E42] p-3 w-56 max-w-[85vw]">
                           <img src="https://images.pexels.com/photos/1598505/pexels-photo-1598505.jpeg?auto=compress&cs=tinysrgb&w=200" className="w-full h-32 rounded-lg object-cover mb-3" alt="product" />
                           <p className="text-xs font-semibold text-[#F0F2FF]">Blue Hoodie</p>
                           <p className="text-sm font-bold text-green-400 mt-0.5">$48.00</p>
                           <p className="text-[10px] text-green-400 mt-0.5">In Stock</p>
-                          <button className="w-full mt-2 py-1.5 rounded-lg bg-blue-500 text-xs text-white font-medium">Buy Now</button>
+                          <button className="w-full mt-2 py-1.5 rounded-lg bg-blue-500 text-xs text-white font-medium active:bg-blue-600">Buy Now</button>
                         </div>
                       ) : (
-                        <div className={`px-3 py-2 rounded-2xl text-sm ${msg.direction === 'OUTBOUND' ? 'bg-blue-500/20 border border-blue-500/30 rounded-tr-sm' : 'bg-[#1A1C24] border border-[#2A2E42] rounded-tl-sm'} text-[#F0F2FF]`}>
+                        <div className={`px-3 py-2 rounded-2xl text-sm ${msg.direction === 'OUTBOUND' ? 'bg-blue-500/20 border border-blue-500/30 rounded-tr-sm' : 'bg-[#1A1C24] border border-[#2A2E42] rounded-tl-sm'} text-[#F0F2FF] max-w-[85vw] md:max-w-[60%]`}>
                           {msg.content}
                         </div>
                       )}
@@ -620,10 +627,10 @@ export function InboxPage() {
 
             {/* AI Suggest */}
             {showAISuggest && (
-              <div className="mx-4 mb-2 p-3 rounded-xl bg-[#1A1C24] border border-blue-500/30">
+              <div className="mx-3 md:mx-4 mb-2 p-3 rounded-xl bg-[#1A1C24] border border-blue-500/30">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium text-blue-400 flex items-center gap-1"><Brain className="w-3.5 h-3.5" /> AI Suggestion</p>
-                  <button onClick={() => setShowAISuggest(false)}><X className="w-3.5 h-3.5 text-[#4B5068]" /></button>
+                  <button onClick={() => setShowAISuggest(false)} className="active:bg-[#222530] p-1 rounded"><X className="w-3.5 h-3.5 text-[#4B5068]" /></button>
                 </div>
                 {aiSuggestLoading ? (
                   <div className="flex items-center gap-2 py-2">
@@ -644,9 +651,9 @@ export function InboxPage() {
             )}
 
             {/* Input Area */}
-            <div className="border-t border-[#1E2130] bg-[#111318] p-3">
+            <div className="border-t border-[#1E2130] bg-[#111318] p-3 safe-area-inset-bottom">
               <div className="flex items-center gap-2 mb-2">
-                <button className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><Smile className="w-3.5 h-3.5" /></button>
+                <button className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] active:bg-[#222530]"><Smile className="w-4 h-4 md:w-3.5 md:h-3.5" /></button>
                 <button className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><Image className="w-3.5 h-3.5" /></button>
                 <button className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><Link2 className="w-3.5 h-3.5" /></button>
                 <button className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><FileText className="w-3.5 h-3.5" /></button>

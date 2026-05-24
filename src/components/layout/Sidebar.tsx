@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Inbox, Zap, Users, BarChart3, Megaphone,
   Brain, Link2, Puzzle, Activity, AlertOctagon, FileText,
-  Settings, ChevronLeft, ChevronRight, Wifi
+  Settings, ChevronLeft, ChevronRight, Wifi, Menu
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -33,14 +33,18 @@ const navItems = [
   ]},
 ];
 
-export function Sidebar({ dlqCount = 0, brokenAccounts = 0, unreadInbox = 0 }: SidebarProps) {
+interface ExtendedSidebarProps extends SidebarProps {
+  onMenuClick?: () => void;
+}
+
+export function Sidebar({ dlqCount = 0, brokenAccounts = 0, unreadInbox = 0, onMenuClick }: ExtendedSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
 
   return (
-    <aside className={`flex flex-col h-full bg-[#111318] border-r border-[#1E2130] transition-all duration-200 ${collapsed ? 'w-14' : 'w-60'} flex-shrink-0`}>
+    <aside className={`flex flex-col h-full bg-[#111318] border-r border-[#1E2130] transition-all duration-200 ${collapsed ? 'w-14' : 'w-60'} flex-shrink-0 hidden md:flex`}>
       {/* Logo area */}
-      <div className="h-13 flex items-center px-4 border-b border-[#1E2130]" style={{ height: 52 }}>
+      <div className="h-14 flex items-center px-4 border-b border-[#1E2130]">
         {!collapsed ? (
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
@@ -49,7 +53,7 @@ export function Sidebar({ dlqCount = 0, brokenAccounts = 0, unreadInbox = 0 }: S
             <span className="text-sm font-bold text-[#F0F2FF] tracking-tight">FlowPulse</span>
           </div>
         ) : (
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center mx-auto">
             <Wifi className="w-4 h-4 text-white" />
           </div>
         )}

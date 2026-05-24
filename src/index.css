@@ -28,10 +28,18 @@
   --tier-newbie: #6B7280;
   --tier-fan: #F59E0B;
   --tier-advocate: #22C55E;
+
+  /* Safe areas for iOS/mobile */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 html, body {
@@ -45,10 +53,28 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
+  overscroll-behavior: none;
 }
 
 #root {
   height: 100%;
+}
+
+/* Safe area utility classes */
+.safe-area-inset-top {
+  padding-top: var(--safe-area-inset-top);
+}
+
+.safe-area-inset-bottom {
+  padding-bottom: var(--safe-area-inset-bottom);
+}
+
+.safe-area-inset-left {
+  padding-left: var(--safe-area-inset-left);
+}
+
+.safe-area-inset-right {
+  padding-right: var(--safe-area-inset-right);
 }
 
 /* Scrollbar styling */
@@ -202,4 +228,86 @@ html, body {
   background-color: var(--pulse-bg-base);
   background-image: radial-gradient(circle, var(--pulse-border-subtle) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+/* Mobile touch interactions */
+@media (hover: none) and (pointer: coarse) {
+  /* Increase tap targets on touch devices */
+  button, a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Better scroll behavior */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Hide scrollbars but keep functionality */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  /* Active states for tap feedback */
+  .touch-active:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+}
+
+/* Pull-to-refresh prevention */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Prevent text selection on interactive elements */
+button, a, .no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Smooth transitions for mobile */
+@media (prefers-reduced-motion: no-preference) {
+  * {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Responsive breakpoints */
+@media (max-width: 767px) {
+  /* Make cards full width on mobile */
+  .card-mobile-full {
+    margin-left: -1rem;
+    margin-right: -1rem;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* Smaller padding on mobile */
+  .p-mobile {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Stack grids on mobile */
+  .grid-mobile-stack {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Hide on mobile */
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  /* Hide on desktop */
+  .hide-desktop {
+    display: none !important;
+  }
 }
