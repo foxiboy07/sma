@@ -283,6 +283,75 @@ export interface IdentityMatchQueue {
   created_at: string;
 }
 
+export interface GrowthTool {
+  id: string;
+  tenant_id: string;
+  brand_id: string;
+  type: 'qr_code' | 'website_widget' | 'click_to_message' | 'referral_link';
+  name: string;
+  platform?: PlatformType;
+  flow_id?: string;
+  config: Record<string, unknown>;
+  qr_code_url?: string;
+  widget_snippet?: string;
+  referral_code?: string;
+  click_count: number;
+  conversion_count: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Segment {
+  id: string;
+  tenant_id: string;
+  brand_id: string;
+  name: string;
+  description?: string;
+  filter_rules: Array<{ field: string; operator: string; value: string }>;
+  is_static: boolean;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EcommerceProduct {
+  id: string;
+  tenant_id: string;
+  brand_id: string;
+  external_id?: string;
+  source: 'shopify' | 'woocommerce' | 'manual';
+  title: string;
+  description?: string;
+  price: number;
+  compare_at_price?: number;
+  image_url?: string;
+  product_url?: string;
+  variants: Record<string, unknown>[];
+  is_available: boolean;
+  synced_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EcommerceOrder {
+  id: string;
+  tenant_id: string;
+  brand_id: string;
+  contact_id?: string;
+  external_order_id?: string;
+  source: 'shopify' | 'woocommerce' | 'manual';
+  status: 'pending' | 'abandoned' | 'processing' | 'completed' | 'cancelled' | 'refunded';
+  total_price: number;
+  currency: string;
+  items: Array<{ product: string; qty: number; price: number }>;
+  checkout_url?: string;
+  recovery_flow_id?: string;
+  recovered_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Toast {
   id: string;
   type: 'success' | 'error' | 'warning' | 'info';

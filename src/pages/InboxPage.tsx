@@ -3,7 +3,7 @@ import {
   Search, Filter, Send, Smile, Image, Link2, FileText,
   MoreVertical, ChevronRight, Brain, User, X,
   AlertTriangle, ExternalLink, Tag,
-  BarChart3, Trash2, Loader2
+  BarChart3, Trash2, Loader2, ShoppingBag
 } from 'lucide-react';
 import { Badge, Toggle, LoyaltyBadge, PlatformIcon } from '../components/ui';
 import { supabase } from '../lib/supabase';
@@ -106,6 +106,75 @@ export function InboxPage() {
 
   // Sending state
   const [sending, setSending] = useState(false);
+
+  // Emoji picker state
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = React.useRef<HTMLDivElement>(null);
+
+  // Product card modal state
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [products, setProducts] = useState<{ id: string; title: string; price: number; image_url: string | null }[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [sendingProduct, setSendingProduct] = useState(false);
+
+  const COMMON_EMOJIS = [
+    '😀','😂','😍','🥰','😎','🤩','😊','🙏','❤️','🔥',
+    '👍','👏','🎉','✨','💯','🚀','💪','🌟','😜','🤔',
+    '😅','🥳','😭','😤','🤗','💀','👀','😱','🤝','💬',
+    '🛍️','💸','🎁','🏆','⚡','🌈','🍕','☕','🎵','🎶',
+    '💡','✅','❌','⭐','🔑','📦','📱','💎','🎯','🙌',
+  ];
+
+  // Close emoji picker when clicking outside
+  React.useEffect(() => {
+    if (!showEmojiPicker) return;
+    function handleClick(e: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showEmojiPicker]);
+
+  async function fetchProducts() {
+    if (!tenantId) return;
+    setProductsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('ecommerce_products')
+        .select('id, title, price, image_url')
+        .eq('tenant_id', tenantId)
+        .limit(50);
+      if (!error) setProducts((data || []) as { id: string; title: string; price: number; image_url: string | null }[]);
+    } catch {
+      // ignore
+    } finally {
+      setProductsLoading(false);
+    }
+  }
+
+  async function sendProductCard(product: { id: string; title: string; price: number; image_url: string | null }) {
+    if (!activeConv || !tenantId || !brandId || sendingProduct) return;
+    setSendingProduct(true);
+    try {
+      const { error } = await supabase.from('messages').insert({
+        conversation_id: activeConv.id,
+        tenant_id: tenantId,
+        direction: 'OUTBOUND',
+        content: JSON.stringify({ product_id: product.id, title: product.title, price: product.price, image_url: product.image_url }),
+        message_type: 'PRODUCT_CARD',
+        delivery_status: 'QUEUED',
+        is_ai_generated: false,
+        ai_token_cost: 0,
+      });
+      if (!error) setShowProductModal(false);
+    } catch (err) {
+      console.error('Failed to send product card:', err);
+    } finally {
+      setSendingProduct(false);
+    }
+  }
 
   // ---- Fetch conversations ----
   useEffect(() => {
@@ -653,10 +722,42 @@ export function InboxPage() {
             {/* Input Area */}
             <div className="border-t border-[#1E2130] bg-[#111318] p-3 safe-area-inset-bottom">
               <div className="flex items-center gap-2 mb-2">
-                <button className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] active:bg-[#222530]"><Smile className="w-4 h-4 md:w-3.5 md:h-3.5" /></button>
+                {/* Emoji Picker */}
+                <div className="relative" ref={emojiPickerRef}>
+                  <button
+                    onClick={() => setShowEmojiPicker(p => !p)}
+                    className={`w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] active:bg-[#222530] ${showEmojiPicker ? 'text-[#F0F2FF] bg-[#1A1C24]' : ''}`}
+                  >
+                    <Smile className="w-4 h-4 md:w-3.5 md:h-3.5" />
+                  </button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-full left-0 mb-2 p-2 rounded-xl bg-[#1A1C24] border border-[#2A2E42] shadow-2xl z-50 w-56">
+                      <div className="grid grid-cols-8 gap-0.5">
+                        {COMMON_EMOJIS.map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => { setMessageInput(prev => prev + emoji); setShowEmojiPicker(false); }}
+                            className="w-6 h-6 flex items-center justify-center text-base hover:bg-[#222530] rounded transition-colors"
+                            title={emoji}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><Image className="w-3.5 h-3.5" /></button>
                 <button className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><Link2 className="w-3.5 h-3.5" /></button>
                 <button className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"><FileText className="w-3.5 h-3.5" /></button>
+                {/* Product Card Button */}
+                <button
+                  onClick={() => { setShowProductModal(true); fetchProducts(); }}
+                  className="w-7 h-7 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]"
+                  title="Send product card"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                </button>
                 <button onClick={getSuggest} disabled={aiSuggestLoading} className="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-400 hover:bg-blue-500/10 font-medium disabled:opacity-50">
                   <Brain className="w-3.5 h-3.5" /> AI Suggest
                 </button>
@@ -693,6 +794,56 @@ export function InboxPage() {
           </div>
         )}
       </div>
+
+      {/* Product Card Modal */}
+      {showProductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowProductModal(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-lg bg-[#1A1C24] border border-[#2A2E42] rounded-2xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2130]">
+              <h2 className="text-base font-semibold text-[#F0F2FF] flex items-center gap-2"><ShoppingBag className="w-4 h-4" /> Product Catalog</h2>
+              <button onClick={() => setShowProductModal(false)} className="p-1 rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#222530] transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-4">
+              {productsLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="w-5 h-5 text-[#4B5068] animate-spin" />
+                </div>
+              ) : products.length === 0 ? (
+                <div className="text-center py-10 text-sm text-[#4B5068]">No products found</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+                  {products.map(product => (
+                    <button
+                      key={product.id}
+                      onClick={() => sendProductCard(product)}
+                      disabled={sendingProduct}
+                      className="flex flex-col rounded-xl border border-[#2A2E42] bg-[#111318] hover:border-blue-500/40 hover:bg-[#1A1C24] transition-colors overflow-hidden text-left disabled:opacity-50"
+                    >
+                      {product.image_url ? (
+                        <img src={product.image_url} alt={product.title} className="w-full h-28 object-cover" />
+                      ) : (
+                        <div className="w-full h-28 bg-[#222530] flex items-center justify-center">
+                          <ShoppingBag className="w-8 h-8 text-[#4B5068]" />
+                        </div>
+                      )}
+                      <div className="p-2.5">
+                        <p className="text-xs font-medium text-[#F0F2FF] truncate">{product.title}</p>
+                        <p className="text-sm font-bold text-green-400 mt-0.5">${Number(product.price).toFixed(2)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Right: Contact Card */}
       {showContactPanel && (

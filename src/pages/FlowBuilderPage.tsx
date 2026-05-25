@@ -8,9 +8,9 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import {
   ArrowLeft, Save, Play, Pause, Undo2, Redo2, Download,
-  AlertTriangle, CheckCircle2, X, ChevronDown, Plus,
+  AlertTriangle, CheckCircle2, X, ChevronDown, Plus, Trash2,
   Zap, MessageSquare, Brain, GitBranch, Clock, RefreshCw,
-  Code2, Webhook, ShoppingBag, Tag, Settings2
+  Code2, Webhook, ShoppingBag, Tag, Settings2, Variable
 } from 'lucide-react';
 import { Button, Badge, Toggle, Modal } from '../components/ui';
 import { supabase } from '../lib/supabase';
@@ -220,8 +220,134 @@ export function FlowBuilderPage() {
     loadFlow();
   }, [id, tenant, setNodes, setEdges]);
 
+  // panelConfig holds the live field values for whichever node is open in the properties panel
+  const [panelConfig, setPanelConfig] = useState<Record<string, any>>({});
+
+  // Whenever the selected node changes, seed panelConfig from node.data.config (or defaults)
+  useEffect(() => {
+    if (!selectedNode) { setPanelConfig({}); return; }
+    const cfg = (selectedNode.data?.config as Record<string, any>) || {};
+    const type = selectedNode.data?.nodeType as string;
+
+    if (type === 'CONDITION') {
+      setPanelConfig({
+        conditionType: cfg.conditionType || 'Check Contact Field',
+        field: cfg.field || 'email',
+        operator: cfg.operator || 'equals',
+        value: cfg.value || '',
+        keyword: cfg.keyword || '',
+        semanticMatch: cfg.semanticMatch || false,
+        tier: cfg.tier || 'NEWBIE',
+        tags: cfg.tags || [],
+        tagInput: '',
+      });
+    } else if (type === 'SEND_MESSAGE') {
+      setPanelConfig({
+        message: cfg.message || selectedNode.data?.preview as string || '',
+        buttons: cfg.buttons || [],
+        askQuestion: cfg.askQuestion || false,
+        questionFieldName: cfg.questionFieldName || '',
+        questionValidation: cfg.questionValidation || 'text',
+      });
+    } else if (type === 'SMART_DELAY') {
+      setPanelConfig({
+        delayValue: cfg.delayValue ?? 30,
+        delayUnit: cfg.delayUnit || 'minutes',
+        only24hWindow: cfg.only24hWindow || false,
+        queueIfOutside: cfg.queueIfOutside || false,
+      });
+    } else if (type === 'AI_STEP') {
+      setPanelConfig({
+        knowledgeBase: cfg.knowledgeBase || 'Product FAQ',
+        strictness: cfg.strictness || 'BALANCED',
+        ifUnsure: cfg.ifUnsure || 'Hand off to human',
+        collectInput: cfg.collectInput || false,
+        inputFieldName: cfg.inputFieldName || '',
+        inputValidation: cfg.inputValidation || 'text',
+        saveResponseTo: cfg.saveResponseTo || '',
+        maxRetries: cfg.maxRetries ?? 2,
+      });
+    } else if (type === 'TRIGGER') {
+      setPanelConfig({
+        keywords: cfg.keywords || ['price', 'how much', 'link'],
+        keywordInput: '',
+        semanticMatch: cfg.semanticMatch || false,
+      });
+    } else {
+      setPanelConfig({ ...cfg });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNode?.id]);
+
+  // Helper: update a single key in panelConfig
+  function pc(key: string, val: any) {
+    setPanelConfig(prev => ({ ...prev, [key]: val }));
+  }
+
+  // Save panelConfig back to the selected node
+  function saveNodeConfig(labelOverride?: string) {
+    if (!selectedNode) return;
+    const type = selectedNode.data?.nodeType as string;
+
+    // Build a clean config (strip UI-only keys like tagInput / keywordInput)
+    const { tagInput: _ti, keywordInput: _ki, ...cleanConfig } = panelConfig;
+
+    // Build a human-readable preview string
+    let preview = '';
+    if (type === 'SEND_MESSAGE') {
+      preview = cleanConfig.message ? cleanConfig.message.slice(0, 80) : '';
+    } else if (type === 'CONDITION') {
+      const ct = cleanConfig.conditionType;
+      if (ct === 'Check Contact Field') preview = `${cleanConfig.field} ${cleanConfig.operator} "${cleanConfig.value}"`;
+      else if (ct === 'Check Message Content') preview = `Message contains: "${cleanConfig.keyword}"`;
+      else if (ct === 'Check Loyalty Tier') preview = `Tier is ${cleanConfig.tier}`;
+      else if (ct === 'Check Tag') preview = `Has tag: ${(cleanConfig.tags || []).join(', ')}`;
+    } else if (type === 'SMART_DELAY') {
+      preview = `Wait ${cleanConfig.delayValue} ${cleanConfig.delayUnit}${cleanConfig.only24hWindow ? ' (24h window)' : ''}`;
+    } else if (type === 'AI_STEP') {
+      preview = `KB: ${cleanConfig.knowledgeBase} · ${cleanConfig.strictness}${cleanConfig.collectInput ? ' · Collects input' : ''}`;
+    } else if (type === 'TRIGGER') {
+      preview = (cleanConfig.keywords || []).join(', ');
+    }
+
+    const newLabel = labelOverride ?? (selectedNode.data?.label as string);
+
+    setNodes(ns => ns.map(n => {
+      if (n.id !== selectedNode.id) return n;
+      return { ...n, data: { ...n.data, label: newLabel, preview, config: cleanConfig } };
+    }));
+
+    // If this is a CONDITION node, label its outgoing edges Yes/No
+    if (type === 'CONDITION') {
+      setEdges(eds => eds.map(e => {
+        if (e.source !== selectedNode.id) return e;
+        if (e.sourceHandle === 'true') return { ...e, label: 'Yes' };
+        if (e.sourceHandle === 'false') return { ...e, label: 'No' };
+        return e;
+      }));
+    }
+
+    setSaveState('unsaved');
+    // Sync selectedNode reference so subsequent saves reflect latest data
+    setSelectedNode(prev => prev ? { ...prev, data: { ...prev.data, label: newLabel, preview, config: cleanConfig } } : prev);
+  }
+
+  // Compute 24h window warning for SMART_DELAY
+  function delayExceeds24h(): boolean {
+    const v = Number(panelConfig.delayValue) || 0;
+    const u = panelConfig.delayUnit || 'minutes';
+    if (u === 'days') return v >= 1;
+    if (u === 'hours') return v >= 24;
+    if (u === 'minutes') return v >= 1440;
+    return false;
+  }
+
   const onConnect = useCallback((params: Connection) => {
-    setEdges(eds => addEdge({ ...params, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, eds));
+    // Auto-label edges coming from condition true/false handles
+    let label: string | undefined;
+    if (params.sourceHandle === 'true') label = 'Yes';
+    else if (params.sourceHandle === 'false') label = 'No';
+    setEdges(eds => addEdge({ ...params, type: 'smoothstep', label, markerEnd: { type: MarkerType.ArrowClosed } }, eds));
     setSaveState('unsaved');
   }, [setEdges]);
 
@@ -606,96 +732,524 @@ export function FlowBuilderPage() {
             </div>
 
             <div className="p-4 space-y-4">
+              {/* ── Node name (all types) ── */}
               <div>
                 <label className="text-xs font-medium text-[#8B90A7] block mb-1">Node name</label>
                 <input
-                  defaultValue={selectedNode.data?.label as string}
+                  value={panelConfig.nodeName ?? (selectedNode.data?.label as string ?? '')}
+                  onChange={e => pc('nodeName', e.target.value)}
                   className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
+              {/* ══════════════════════════════════════════════════
+                  TRIGGER
+              ══════════════════════════════════════════════════ */}
               {selectedNode.data?.nodeType === 'TRIGGER' && (
                 <div>
                   <label className="text-xs font-medium text-[#8B90A7] block mb-1">Keywords</label>
                   <div className="flex flex-wrap gap-1 p-2 rounded-lg bg-[#1A1C24] border border-[#2A2E42] min-h-[40px]">
-                    {['price', 'how much', 'link'].map(kw => (
+                    {(panelConfig.keywords || []).map((kw: string) => (
                       <span key={kw} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-xs">
-                        {kw} <X className="w-2.5 h-2.5 cursor-pointer" />
+                        {kw}
+                        <X className="w-2.5 h-2.5 cursor-pointer" onClick={() => pc('keywords', panelConfig.keywords.filter((k: string) => k !== kw))} />
                       </span>
                     ))}
                   </div>
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      value={panelConfig.keywordInput || ''}
+                      onChange={e => pc('keywordInput', e.target.value)}
+                      onKeyDown={e => {
+                        if ((e.key === 'Enter' || e.key === ',') && panelConfig.keywordInput?.trim()) {
+                          e.preventDefault();
+                          const kw = panelConfig.keywordInput.trim().replace(/,$/, '');
+                          if (kw && !(panelConfig.keywords || []).includes(kw)) {
+                            setPanelConfig(prev => ({ ...prev, keywords: [...(prev.keywords || []), kw], keywordInput: '' }));
+                          }
+                        }
+                      }}
+                      placeholder="Type keyword + Enter"
+                      className="flex-1 h-8 rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2.5 focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => {
+                        const kw = (panelConfig.keywordInput || '').trim();
+                        if (kw && !(panelConfig.keywords || []).includes(kw)) {
+                          setPanelConfig(prev => ({ ...prev, keywords: [...(prev.keywords || []), kw], keywordInput: '' }));
+                        }
+                      }}
+                      className="h-8 px-2.5 rounded-lg bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30"
+                    >Add</button>
+                  </div>
                   <div className="mt-2">
-                    <Toggle checked={false} onChange={() => {}} label="Semantic matching (match similar meaning)" size="sm" />
+                    <Toggle
+                      checked={panelConfig.semanticMatch || false}
+                      onChange={v => pc('semanticMatch', v)}
+                      label="Semantic matching (match similar meaning)"
+                      size="sm"
+                    />
                   </div>
                 </div>
               )}
 
-              {selectedNode.data?.nodeType === 'SEND_MESSAGE' && (
-                <div>
-                  <label className="text-xs font-medium text-[#8B90A7] block mb-1">Message content</label>
-                  <textarea
-                    defaultValue="Hi {{contact.name}}! Thanks for reaching out..."
-                    className="w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] p-3 focus:outline-none focus:border-blue-500 resize-y min-h-[100px]"
-                  />
-                  <p className="text-[10px] text-[#4B5068] mt-1">Use {'{{contact.name}}'}, {'{{flow.keyword}}'} for personalization</p>
+              {/* ══════════════════════════════════════════════════
+                  SEND_MESSAGE — message + buttons + variable helper + ask-question
+              ══════════════════════════════════════════════════ */}
+              {selectedNode.data?.nodeType === 'SEND_MESSAGE' && (() => {
+                const msg: string = panelConfig.message || '';
+                const buttons: { label: string; action: string; value: string }[] = panelConfig.buttons || [];
+                const charLimit = 1000;
+                const variables = ['{{contact.name}}', '{{contact.email}}', '{{flow.keyword}}', '{{brand.name}}'];
+
+                return (
+                  <div className="space-y-3">
+                    {/* Message textarea */}
+                    <div>
+                      <label className="text-xs font-medium text-[#8B90A7] block mb-1">Message content</label>
+                      <textarea
+                        value={msg}
+                        onChange={e => pc('message', e.target.value)}
+                        maxLength={charLimit}
+                        className="w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] p-3 focus:outline-none focus:border-blue-500 resize-y min-h-[100px]"
+                        placeholder="Hi {{contact.name}}! Thanks for reaching out..."
+                      />
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-[10px] text-[#4B5068]">Press variable button below to insert</p>
+                        <span className={`text-[10px] font-medium ${msg.length > charLimit * 0.9 ? 'text-amber-400' : 'text-[#4B5068]'}`}>{msg.length}/{charLimit}</span>
+                      </div>
+                    </div>
+
+                    {/* Variable insertion helpers */}
+                    <div>
+                      <p className="text-[10px] text-[#8B90A7] font-medium mb-1.5 flex items-center gap-1"><Variable className="w-3 h-3" /> Insert variable</p>
+                      <div className="flex flex-wrap gap-1">
+                        {variables.map(v => (
+                          <button
+                            key={v}
+                            onClick={() => pc('message', msg + v)}
+                            className="px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 text-[10px] hover:bg-blue-500/25 font-mono"
+                          >{v}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Quick-reply buttons */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-[#8B90A7]">Quick Reply Buttons</label>
+                        {buttons.length < 3 && (
+                          <button
+                            onClick={() => pc('buttons', [...buttons, { label: 'Button ' + (buttons.length + 1), action: 'custom', value: '' }])}
+                            className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300"
+                          ><Plus className="w-3 h-3" /> Add Button</button>
+                        )}
+                      </div>
+                      {buttons.length === 0 && (
+                        <p className="text-[10px] text-[#4B5068] italic">No buttons. Up to 3 quick replies allowed.</p>
+                      )}
+                      <div className="space-y-2">
+                        {buttons.map((btn, i) => (
+                          <div key={i} className="p-2.5 rounded-lg bg-[#0A0B0F] border border-[#1E2130] space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                value={btn.label}
+                                onChange={e => pc('buttons', buttons.map((b, j) => j === i ? { ...b, label: e.target.value } : b))}
+                                placeholder="Button label"
+                                className="flex-1 h-7 rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                              />
+                              <button onClick={() => pc('buttons', buttons.filter((_, j) => j !== i))} className="text-[#4B5068] hover:text-red-400">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <select
+                              value={btn.action}
+                              onChange={e => pc('buttons', buttons.map((b, j) => j === i ? { ...b, action: e.target.value } : b))}
+                              className="h-7 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 appearance-none"
+                            >
+                              <option value="custom">Custom action</option>
+                              <option value="open_url">Open URL</option>
+                              <option value="trigger_flow">Trigger another flow</option>
+                            </select>
+                            <input
+                              value={btn.value}
+                              onChange={e => pc('buttons', buttons.map((b, j) => j === i ? { ...b, value: e.target.value } : b))}
+                              placeholder={btn.action === 'open_url' ? 'https://...' : btn.action === 'trigger_flow' ? 'Flow ID or name' : 'Action payload'}
+                              className="h-7 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Message preview */}
+                    {(msg || buttons.length > 0) && (
+                      <div>
+                        <p className="text-[10px] text-[#8B90A7] font-medium mb-1.5">Preview</p>
+                        <div className="p-3 rounded-lg bg-[#0A0B0F] border border-[#1E2130]">
+                          {msg && <p className="text-xs text-[#F0F2FF] whitespace-pre-wrap">{msg}</p>}
+                          {buttons.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {buttons.map((btn, i) => (
+                                <span key={i} className="px-3 py-1 rounded-full border border-blue-500/40 text-xs text-blue-400 bg-blue-500/10">{btn.label || 'Button'}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ask question / collect input */}
+                    <div className="pt-1 border-t border-[#1E2130]">
+                      <Toggle
+                        checked={panelConfig.askQuestion || false}
+                        onChange={v => pc('askQuestion', v)}
+                        label="Collect user response to this message"
+                        size="sm"
+                      />
+                      {panelConfig.askQuestion && (
+                        <div className="mt-3 space-y-2 pl-1">
+                          <div>
+                            <label className="text-[10px] text-[#8B90A7] block mb-1">Save response to field</label>
+                            <input
+                              value={panelConfig.questionFieldName || ''}
+                              onChange={e => pc('questionFieldName', e.target.value)}
+                              placeholder="e.g. user_email"
+                              className="h-7 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-[#8B90A7] block mb-1">Validation type</label>
+                            <select
+                              value={panelConfig.questionValidation || 'text'}
+                              onChange={e => pc('questionValidation', e.target.value)}
+                              className="h-7 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 appearance-none"
+                            >
+                              <option value="text">Any text</option>
+                              <option value="email">Email address</option>
+                              <option value="phone">Phone number</option>
+                              <option value="number">Number</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ══════════════════════════════════════════════════
+                  CONDITION
+              ══════════════════════════════════════════════════ */}
+              {selectedNode.data?.nodeType === 'CONDITION' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-[#8B90A7] block mb-1">Condition type</label>
+                    <select
+                      value={panelConfig.conditionType || 'Check Contact Field'}
+                      onChange={e => pc('conditionType', e.target.value)}
+                      className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 appearance-none focus:outline-none focus:border-blue-500"
+                    >
+                      <option>Check Contact Field</option>
+                      <option>Check Message Content</option>
+                      <option>Check Loyalty Tier</option>
+                      <option>Check Tag</option>
+                    </select>
+                  </div>
+
+                  {panelConfig.conditionType === 'Check Contact Field' && (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-[10px] text-[#8B90A7] block mb-1">Field</label>
+                        <select
+                          value={panelConfig.field || 'email'}
+                          onChange={e => pc('field', e.target.value)}
+                          className="h-8 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 appearance-none focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="email">Email</option>
+                          <option value="phone">Phone</option>
+                          <option value="loyalty_score">Loyalty Score</option>
+                          <option value="sentiment_score">Sentiment Score</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#8B90A7] block mb-1">Operator</label>
+                        <select
+                          value={panelConfig.operator || 'equals'}
+                          onChange={e => pc('operator', e.target.value)}
+                          className="h-8 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 appearance-none focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="equals">Equals</option>
+                          <option value="not_equals">Not equals</option>
+                          <option value="contains">Contains</option>
+                          <option value="greater_than">Greater than</option>
+                          <option value="less_than">Less than</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#8B90A7] block mb-1">Value</label>
+                        <input
+                          value={panelConfig.value || ''}
+                          onChange={e => pc('value', e.target.value)}
+                          placeholder="Comparison value"
+                          className="h-8 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {panelConfig.conditionType === 'Check Message Content' && (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-[10px] text-[#8B90A7] block mb-1">Keyword or phrase</label>
+                        <input
+                          value={panelConfig.keyword || ''}
+                          onChange={e => pc('keyword', e.target.value)}
+                          placeholder="e.g. price, buy now"
+                          className="h-8 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <Toggle
+                        checked={panelConfig.semanticMatch || false}
+                        onChange={v => pc('semanticMatch', v)}
+                        label="Semantic matching (match similar meaning)"
+                        size="sm"
+                      />
+                    </div>
+                  )}
+
+                  {panelConfig.conditionType === 'Check Loyalty Tier' && (
+                    <div>
+                      <label className="text-[10px] text-[#8B90A7] block mb-1">Loyalty tier</label>
+                      <select
+                        value={panelConfig.tier || 'NEWBIE'}
+                        onChange={e => pc('tier', e.target.value)}
+                        className="h-8 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 appearance-none focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="NEWBIE">NEWBIE</option>
+                        <option value="FAN">FAN</option>
+                        <option value="ADVOCATE">ADVOCATE</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {panelConfig.conditionType === 'Check Tag' && (
+                    <div>
+                      <label className="text-[10px] text-[#8B90A7] block mb-1">Tags (all must match)</label>
+                      <div className="flex flex-wrap gap-1 p-2 rounded bg-[#1A1C24] border border-[#2A2E42] min-h-[36px] mb-1.5">
+                        {(panelConfig.tags || []).map((t: string) => (
+                          <span key={t} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px]">
+                            {t}
+                            <X className="w-2.5 h-2.5 cursor-pointer" onClick={() => pc('tags', panelConfig.tags.filter((x: string) => x !== t))} />
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input
+                          value={panelConfig.tagInput || ''}
+                          onChange={e => pc('tagInput', e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && panelConfig.tagInput?.trim()) {
+                              e.preventDefault();
+                              const t = panelConfig.tagInput.trim();
+                              if (t && !(panelConfig.tags || []).includes(t)) {
+                                setPanelConfig(prev => ({ ...prev, tags: [...(prev.tags || []), t], tagInput: '' }));
+                              }
+                            }
+                          }}
+                          placeholder="Tag name + Enter"
+                          className="flex-1 h-7 rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                        />
+                        <button
+                          onClick={() => {
+                            const t = (panelConfig.tagInput || '').trim();
+                            if (t && !(panelConfig.tags || []).includes(t)) {
+                              setPanelConfig(prev => ({ ...prev, tags: [...(prev.tags || []), t], tagInput: '' }));
+                            }
+                          }}
+                          className="h-7 px-2 rounded bg-amber-500/20 text-amber-400 text-xs hover:bg-amber-500/30"
+                        >Add</button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 p-3 rounded-lg bg-[#0A0B0F] border border-[#1E2130]">
+                    <p className="text-[10px] text-[#8B90A7]">
+                      The <span className="text-green-400 font-medium">green handle</span> routes contacts where the condition is <strong>true (Yes)</strong>.{' '}
+                      The <span className="text-red-400 font-medium">red handle</span> routes <strong>false (No)</strong>.
+                    </p>
+                  </div>
                 </div>
               )}
 
+              {/* ══════════════════════════════════════════════════
+                  SMART_DELAY
+              ══════════════════════════════════════════════════ */}
+              {selectedNode.data?.nodeType === 'SMART_DELAY' && (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-[#8B90A7] block mb-1">Delay</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={panelConfig.delayValue ?? 30}
+                        onChange={e => pc('delayValue', Number(e.target.value))}
+                        className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-[#8B90A7] block mb-1">Unit</label>
+                      <select
+                        value={panelConfig.delayUnit || 'minutes'}
+                        onChange={e => pc('delayUnit', e.target.value)}
+                        className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 appearance-none focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="minutes">minutes</option>
+                        <option value="hours">hours</option>
+                        <option value="days">days</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <Toggle
+                    checked={panelConfig.only24hWindow || false}
+                    onChange={v => pc('only24hWindow', v)}
+                    label="Send within 24h window only"
+                    size="sm"
+                  />
+
+                  {panelConfig.only24hWindow && (
+                    <Toggle
+                      checked={panelConfig.queueIfOutside || false}
+                      onChange={v => pc('queueIfOutside', v)}
+                      label="If outside window, queue for next window"
+                      size="sm"
+                    />
+                  )}
+
+                  {delayExceeds24h() && (
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                        <p className="text-xs font-medium text-amber-400">24H Window Warning</p>
+                      </div>
+                      <p className="text-xs text-[#8B90A7]">
+                        This delay ({panelConfig.delayValue} {panelConfig.delayUnit}) will push contacts past their 24h messaging window.
+                        {!panelConfig.only24hWindow && ' Enable "Send within 24h window only" or add a Message Tag to the downstream node.'}
+                      </p>
+                      {!panelConfig.only24hWindow && (
+                        <button className="text-xs text-blue-400 hover:text-blue-300 mt-1.5 font-medium">Add Message Tag →</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ══════════════════════════════════════════════════
+                  AI_STEP
+              ══════════════════════════════════════════════════ */}
               {selectedNode.data?.nodeType === 'AI_STEP' && (
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs font-medium text-[#8B90A7] block mb-1">Knowledge Base</label>
-                    <select className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 appearance-none">
+                    <select
+                      value={panelConfig.knowledgeBase || 'Product FAQ'}
+                      onChange={e => pc('knowledgeBase', e.target.value)}
+                      className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 appearance-none focus:outline-none focus:border-blue-500"
+                    >
                       <option>Product FAQ</option>
                       <option>Shipping Policy</option>
+                      <option>Returns Policy</option>
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-[#8B90A7] block mb-2">Strictness</label>
                     <div className="flex gap-1 p-1 bg-[#0A0B0F] rounded-lg border border-[#1E2130]">
                       {['STRICT', 'BALANCED', 'CREATIVE'].map(s => (
-                        <button key={s} className={`flex-1 py-1.5 rounded-md text-[10px] font-medium transition-colors ${s === 'BALANCED' ? 'bg-[#1A1C24] text-[#F0F2FF]' : 'text-[#4B5068] hover:text-[#F0F2FF]'}`}>{s}</button>
+                        <button
+                          key={s}
+                          onClick={() => pc('strictness', s)}
+                          className={`flex-1 py-1.5 rounded-md text-[10px] font-medium transition-colors ${panelConfig.strictness === s ? 'bg-[#1A1C24] text-[#F0F2FF]' : 'text-[#4B5068] hover:text-[#F0F2FF]'}`}
+                        >{s}</button>
                       ))}
                     </div>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-[#8B90A7] block mb-1">If unsure</label>
-                    <select className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 appearance-none">
+                    <select
+                      value={panelConfig.ifUnsure || 'Hand off to human'}
+                      onChange={e => pc('ifUnsure', e.target.value)}
+                      className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 appearance-none focus:outline-none focus:border-blue-500"
+                    >
                       <option>Hand off to human</option>
                       <option>Ask clarifying question</option>
                       <option>Send fallback message</option>
                     </select>
                   </div>
+
+                  {/* Collect User Input */}
+                  <div className="pt-1 border-t border-[#1E2130]">
+                    <Toggle
+                      checked={panelConfig.collectInput || false}
+                      onChange={v => pc('collectInput', v)}
+                      label="Collect user input (AI asks a question and waits)"
+                      size="sm"
+                    />
+                    {panelConfig.collectInput && (
+                      <div className="mt-3 space-y-2 pl-1">
+                        <div>
+                          <label className="text-[10px] text-[#8B90A7] block mb-1">Input field name</label>
+                          <input
+                            value={panelConfig.inputFieldName || ''}
+                            onChange={e => pc('inputFieldName', e.target.value)}
+                            placeholder="e.g. custom_order_id"
+                            className="h-7 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                          />
+                          <p className="text-[10px] text-[#4B5068] mt-0.5">Saved to contact's custom_fields</p>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#8B90A7] block mb-1">Validation type</label>
+                          <select
+                            value={panelConfig.inputValidation || 'text'}
+                            onChange={e => pc('inputValidation', e.target.value)}
+                            className="h-7 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 appearance-none"
+                          >
+                            <option value="text">Any text</option>
+                            <option value="email">Email address</option>
+                            <option value="phone">Phone number</option>
+                            <option value="number">Number</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#8B90A7] block mb-1">Save response to</label>
+                          <input
+                            value={panelConfig.saveResponseTo || ''}
+                            onChange={e => pc('saveResponseTo', e.target.value)}
+                            placeholder="contact field name"
+                            className="h-7 w-full rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#8B90A7] block mb-1">Max retries before fallback</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={5}
+                            value={panelConfig.maxRetries ?? 2}
+                            onChange={e => pc('maxRetries', Number(e.target.value))}
+                            className="h-7 w-24 rounded bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {selectedNode.data?.nodeType === 'SMART_DELAY' && (
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs font-medium text-[#8B90A7] block mb-1">Delay</label>
-                      <input type="number" defaultValue="30" className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 focus:outline-none focus:border-blue-500" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-medium text-[#8B90A7] block mb-1">Unit</label>
-                      <select className="h-9 w-full rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] px-3 appearance-none">
-                        <option>minutes</option>
-                        <option>hours</option>
-                        <option>days</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                      <p className="text-xs font-medium text-amber-400">24H Window Warning</p>
-                    </div>
-                    <p className="text-xs text-[#8B90A7]">This delay may push ~34% of contacts past their 24h window. Add a Message Tag to the downstream message node.</p>
-                    <button className="text-xs text-blue-400 hover:text-blue-300 mt-1.5 font-medium">Add Message Tag →</button>
-                  </div>
-                </div>
-              )}
-
+              {/* ══════════════════════════════════════════════════
+                  SUPER_RANDOMIZER (existing, kept functional)
+              ══════════════════════════════════════════════════ */}
               {selectedNode.data?.nodeType === 'SUPER_RANDOMIZER' && (
                 <div className="space-y-3">
                   <div>
@@ -729,8 +1283,14 @@ export function FlowBuilderPage() {
                 </div>
               )}
 
+              {/* ── Save / Delete ── */}
               <div className="pt-3 border-t border-[#1E2130] flex gap-2">
-                <Button variant="primary" size="sm" className="flex-1">Save Node</Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => saveNodeConfig(panelConfig.nodeName || undefined)}
+                >Save Node</Button>
                 <Button variant="danger" size="sm" onClick={() => {
                   setNodes(ns => ns.filter(n => n.id !== selectedNode.id));
                   setSelectedNode(null);

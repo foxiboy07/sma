@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Inbox, Zap, Users, BarChart3, Megaphone,
   Brain, Link2, Puzzle, Activity, AlertOctagon, FileText,
-  Settings, ChevronLeft, ChevronRight, Wifi, Menu
+  Settings, ChevronLeft, ChevronRight, Wifi, Menu, Rocket, Filter, ShoppingBag
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,6 +23,9 @@ const navItems = [
   ]},
   { group: 'TOOLS', items: [
     { to: '/knowledge-base', icon: Brain, label: 'AI Knowledge Base' },
+    { to: '/growth-tools', icon: Rocket, label: 'Growth Tools' },
+    { to: '/segments', icon: Filter, label: 'Segments' },
+    { to: '/ecommerce', icon: ShoppingBag, label: 'E-commerce' },
     { to: '/links', icon: Link2, label: 'Short Links' },
     { to: '/integrations', icon: Puzzle, label: 'Integrations' },
   ]},

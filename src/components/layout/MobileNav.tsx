@@ -2,7 +2,8 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Inbox, Zap, Users, BarChart3, Settings,
-  Menu, X, Megaphone, Brain, Link2, Puzzle, Activity, AlertOctagon, FileText
+  Menu, X, Megaphone, Brain, Link2, Puzzle, Activity, AlertOctagon, FileText,
+  Rocket, Filter, ShoppingBag
 } from 'lucide-react';
 
 interface MobileNavProps {
@@ -39,6 +40,9 @@ const sideMenuItems = [
   ]},
   { group: 'TOOLS', items: [
     { to: '/knowledge-base', icon: Brain, label: 'AI Knowledge Base' },
+    { to: '/growth-tools', icon: Rocket, label: 'Growth Tools' },
+    { to: '/segments', icon: Filter, label: 'Segments' },
+    { to: '/ecommerce', icon: ShoppingBag, label: 'E-commerce' },
     { to: '/links', icon: Link2, label: 'Short Links' },
     { to: '/integrations', icon: Puzzle, label: 'Integrations' },
   ]},

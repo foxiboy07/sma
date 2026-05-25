@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Download, Upload, Merge, MoreVertical, Tag, Trash2, MessageSquare, ExternalLink, ChevronDown, X } from 'lucide-react';
-import { Button, Badge, LoyaltyBadge, PlatformIcon, EmptyState, Card } from '../components/ui';
+import { Search, Filter, Download, Upload, Merge, MoreVertical, Tag, Trash2, MessageSquare, ExternalLink, ChevronDown, X, FileUp, AlertCircle } from 'lucide-react';
+import { Button, Badge, LoyaltyBadge, PlatformIcon, EmptyState, Card, Modal } from '../components/ui';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -35,6 +35,116 @@ export function ContactsPage() {
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [merging, setMerging] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // CSV Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvPreviewRows, setCsvPreviewRows] = useState<string[][]>([]);
+  const [csvAllRows, setCsvAllRows] = useState<string[][]>([]);
+  const [columnMap, setColumnMap] = useState<Record<string, string>>({});
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ count: number; error?: string } | null>(null);
+
+  const CONTACT_FIELDS = ['display_name', 'email', 'phone', 'tags', 'notes', 'custom_fields'];
+
+  function parseCSV(text: string): { headers: string[]; rows: string[][] } {
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+    function parseLine(line: string): string[] {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (ch === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    }
+    if (lines.length === 0) return { headers: [], rows: [] };
+    const headers = parseLine(lines[0]);
+    const rows = lines.slice(1).map(parseLine);
+    return { headers, rows };
+  }
+
+  function handleCsvFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvFile(file);
+    setImportResult(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const { headers, rows } = parseCSV(text);
+      setCsvHeaders(headers);
+      setCsvPreviewRows(rows.slice(0, 5));
+      setCsvAllRows(rows);
+      // Auto-map headers that exactly match field names
+      const autoMap: Record<string, string> = {};
+      headers.forEach(h => {
+        const lower = h.toLowerCase().replace(/\s+/g, '_');
+        if (CONTACT_FIELDS.includes(lower)) autoMap[h] = lower;
+      });
+      setColumnMap(autoMap);
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleImport() {
+    if (!tenant || !brand || csvAllRows.length === 0) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const map = columnMap;
+      const mapped = csvAllRows.map(row => {
+        const get = (field: string) => {
+          const header = Object.keys(map).find(k => map[k] === field);
+          if (!header) return undefined;
+          const idx = csvHeaders.indexOf(header);
+          return idx >= 0 ? row[idx] : undefined;
+        };
+        return {
+          tenant_id: tenant.id,
+          brand_id: brand.id,
+          display_name: get('display_name') || null,
+          email: get('email') || null,
+          phone: get('phone') || null,
+          tags: get('tags') ? get('tags')!.split(';').map(t => t.trim()).filter(Boolean) : [],
+          notes: get('notes') || null,
+          loyalty_score: 30,
+          loyalty_tier: 'NEWBIE',
+          sentiment_score: 0.5,
+        };
+      }).filter(r => r.display_name || r.email || r.phone);
+
+      const { error } = await supabase.from('unified_contacts').insert(mapped);
+      if (error) throw error;
+      setImportResult({ count: mapped.length });
+      await loadContacts();
+    } catch (err: any) {
+      setImportResult({ count: 0, error: err.message || 'Import failed' });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function closeImportModal() {
+    setShowImportModal(false);
+    setCsvFile(null);
+    setCsvHeaders([]);
+    setCsvPreviewRows([]);
+    setCsvAllRows([]);
+    setColumnMap({});
+    setImportResult(null);
+  }
 
   useEffect(() => {
     if (!tenant) return;
@@ -227,7 +337,7 @@ export function ContactsPage() {
           <p className="text-xs text-[#8B90A7] mt-0.5">{contacts.length} total contacts</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm"><Upload className="w-3.5 h-3.5" /> Import</Button>
+          <Button variant="secondary" size="sm" onClick={() => setShowImportModal(true)}><Upload className="w-3.5 h-3.5" /> Import CSV</Button>
           <Button variant="secondary" size="sm" onClick={handleExportCSV} disabled={exporting}><Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting...' : 'Export CSV'}</Button>
           <Button variant="secondary" size="sm" onClick={handleMergeDuplicates} disabled={merging}><Merge className="w-3.5 h-3.5" /> {merging ? 'Merging...' : 'Merge Duplicates'} {duplicateCount > 0 && <Badge variant="warning" className="ml-1">{duplicateCount}</Badge>}</Button>
         </div>
@@ -350,6 +460,101 @@ export function ContactsPage() {
           )}
         </div>
       )}
+
+      {/* CSV Import Modal */}
+      <Modal
+        open={showImportModal}
+        onClose={closeImportModal}
+        title="Import Contacts from CSV"
+        maxWidth="max-w-2xl"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={closeImportModal}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleImport}
+              disabled={importing || csvAllRows.length === 0}
+            >
+              {importing ? 'Importing...' : `Import ${csvAllRows.length > 0 ? csvAllRows.length : ''} Contacts`}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {/* File input */}
+          <div>
+            <label className="block text-xs font-medium text-[#8B90A7] mb-1.5">Select CSV File</label>
+            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border-2 border-dashed border-[#2A2E42] hover:border-blue-500/50 transition-colors">
+              <FileUp className="w-5 h-5 text-[#4B5068]" />
+              <span className="text-sm text-[#8B90A7]">{csvFile ? csvFile.name : 'Click to choose a .csv file'}</span>
+              <input type="file" accept=".csv" className="hidden" onChange={handleCsvFileChange} />
+            </label>
+          </div>
+
+          {/* Preview */}
+          {csvHeaders.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-[#8B90A7] mb-1.5">Preview (first 5 rows)</p>
+              <div className="overflow-x-auto rounded-lg border border-[#2A2E42]">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-[#2A2E42] bg-[#111318]">
+                      {csvHeaders.map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-[#4B5068] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvPreviewRows.map((row, i) => (
+                      <tr key={i} className="border-b border-[#1E2130]">
+                        {row.map((cell, j) => (
+                          <td key={j} className="px-3 py-1.5 text-[#8B90A7] whitespace-nowrap max-w-[120px] truncate">{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Column mapping */}
+          {csvHeaders.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-[#8B90A7] mb-1.5">Map CSV Columns to Contact Fields</p>
+              <div className="grid grid-cols-2 gap-2">
+                {csvHeaders.map(header => (
+                  <div key={header} className="flex items-center gap-2">
+                    <span className="text-xs text-[#F0F2FF] w-28 truncate flex-shrink-0" title={header}>{header}</span>
+                    <span className="text-[#4B5068]">→</span>
+                    <select
+                      value={columnMap[header] || ''}
+                      onChange={e => setColumnMap(prev => ({ ...prev, [header]: e.target.value }))}
+                      className="flex-1 h-7 rounded-lg bg-[#111318] border border-[#2A2E42] text-xs text-[#F0F2FF] px-2 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="">Skip</option>
+                      {CONTACT_FIELDS.map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Import result */}
+          {importResult && (
+            <div className={`flex items-start gap-2 p-3 rounded-xl text-xs ${importResult.error ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-green-500/10 border border-green-500/20 text-green-400'}`}>
+              {importResult.error
+                ? <><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>Error: {importResult.error}</span></>
+                : <><span className="text-lg leading-none">✓</span><span>Successfully imported {importResult.count} contact{importResult.count !== 1 ? 's' : ''}!</span></>
+              }
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -19,6 +19,9 @@ import { TemplatesPage } from './pages/TemplatesPage';
 import { GDPRPage } from './pages/GDPRPage';
 import { APIPage } from './pages/APIPage';
 import { ContactDetailPage } from './pages/ContactDetailPage';
+import { GrowthToolsPage } from './pages/GrowthToolsPage';
+import { SegmentsPage } from './pages/SegmentsPage';
+import { EcommercePage } from './pages/EcommercePage';
 import {
   SettingsLayout, GeneralSettings, TeamSettings,
   BillingSettings, AISettings, NotificationsSettings
@@ -68,6 +71,9 @@ function AppWithAuth() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="broadcasts" element={<BroadcastsPage />} />
         <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="growth-tools" element={<GrowthToolsPage />} />
+        <Route path="segments" element={<SegmentsPage />} />
+        <Route path="ecommerce" element={<EcommercePage />} />
         <Route path="links" element={<ShortLinksPage />} />
         <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="health" element={<TokenHealthPage />} />
