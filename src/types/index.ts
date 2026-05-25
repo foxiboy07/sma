@@ -11,7 +11,7 @@ export type MessageDirection = 'INBOUND' | 'OUTBOUND';
 export type MessageType = 'TEXT' | 'DM_CARD' | 'PRODUCT_CARD' | 'SYSTEM';
 export type DeliveryStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED';
 export type AITier = 'TIER_1' | 'TIER_2';
-export type KBSourceType = 'PDF' | 'URL';
+export type KBSourceType = 'PDF' | 'URL' | 'TEXT' | 'QA';
 export type KBIndexStatus = 'PENDING' | 'INDEXED' | 'FAILED';
 export type KBStrictness = 'STRICT' | 'BALANCED' | 'CREATIVE';
 
@@ -167,6 +167,12 @@ export interface KBDocument {
   chunk_count: number;
   strictness: KBStrictness;
   error_message?: string;
+  content_preview?: string;
+  auto_reindex: boolean;
+  last_indexed_at?: string;
+  qa_question?: string;
+  qa_answer?: string;
+  crawl_depth: number;
   created_at: string;
 }
 
