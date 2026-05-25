@@ -423,7 +423,7 @@ function ProductsTab({ tenantId }: ProductsTabProps) {
   return (
     <div className="space-y-5">
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <MetricCard
           label="Total Products"
           value={totalProducts}
@@ -479,7 +479,7 @@ function ProductsTab({ tenantId }: ProductsTabProps) {
 
       {/* Product grid */}
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="bg-[#111318] border border-[#2A2E42] rounded-xl overflow-hidden animate-pulse">
               <div className="h-40 bg-[#1A1C24]" />
@@ -509,7 +509,7 @@ function ProductsTab({ tenantId }: ProductsTabProps) {
           }
         />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {filtered.map(product => (
             <div
               key={product.id}
@@ -763,7 +763,7 @@ function AbandonedCartsTab({ tenantId }: AbandonedCartsTabProps) {
   return (
     <div className="space-y-5">
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard
           label="Abandoned"
           value={totalAbandoned}
@@ -824,8 +824,8 @@ function AbandonedCartsTab({ tenantId }: AbandonedCartsTabProps) {
           description="When shoppers leave your store without completing checkout, they'll appear here for recovery."
         />
       ) : (
-        <div className="bg-[#111318] border border-[#2A2E42] rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-[#111318] border border-[#2A2E42] rounded-xl overflow-hidden overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-[#2A2E42]">
                 <th className="text-left px-4 py-3 text-xs font-medium text-[#8B90A7] uppercase tracking-wider">
@@ -1122,7 +1122,7 @@ function IntegrationsTab({ tenantId }: IntegrationsTabProps) {
   return (
     <div className="space-y-6">
       {/* Store cards */}
-      <div className="flex gap-4">
+      <div className="flex flex-col md:flex-row gap-4">
         {storeCard(shopify)}
         {storeCard(woocommerce)}
       </div>
@@ -1256,7 +1256,7 @@ export function EcommercePage() {
   ];
 
   return (
-    <div className="min-h-full bg-[#0A0B0F] p-6">
+    <div className="min-h-full bg-[#0A0B0F] p-4 md:p-6">
       <div className="max-w-[1400px] mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between">

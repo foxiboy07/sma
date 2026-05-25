@@ -55,6 +55,7 @@ export function DashboardPage() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [period, setPeriod] = useState<'24h' | '7d' | '30d'>('24h');
 
   const [priorityRed, setPriorityRed] = useState<PriorityRedItem[]>([]);
@@ -143,6 +144,16 @@ export function DashboardPage() {
     });
   }, [tenant?.id]);
 
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    if (!tenant?.id) return;
+    const interval = setInterval(() => {
+      refreshData();
+      setLastRefreshed(new Date());
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [tenant?.id, refreshData]);
+
   // Realtime notifications subscription
   useNotificationsRealtime(
     tenant?.id || null,
@@ -150,6 +161,7 @@ export function DashboardPage() {
     () => {
       // Refresh data when notifications arrive
       refreshData();
+      setLastRefreshed(new Date());
     }
   );
 
@@ -307,12 +319,20 @@ export function DashboardPage() {
       });
 
       setLoading(false);
+      setLastRefreshed(new Date());
     });
   }, [tenant?.id]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const firstName = user?.email?.split('@')[0] || 'there';
+
+  function formatLastRefreshed(date: Date) {
+    const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (secs < 10) return 'just now';
+    if (secs < 60) return `${secs}s ago`;
+    return `${Math.floor(secs / 60)}m ago`;
+  }
 
   const isNewUser = accounts.length === 0;
 
@@ -326,7 +346,13 @@ export function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg md:text-xl font-bold text-[#F0F2FF]">{greeting}, {firstName}</h1>
-          <p className="text-xs md:text-sm text-[#8B90A7]">{format(new Date(), 'MMMM d, yyyy')} · Last updated just now</p>
+          <p className="text-xs md:text-sm text-[#8B90A7]">
+            {format(new Date(), 'MMMM d, yyyy')} · Updated {formatLastRefreshed(lastRefreshed)}
+            <span className="inline-flex items-center gap-1 ml-2 text-[10px] text-[#4B5068]">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+              auto-refresh on
+            </span>
+          </p>
         </div>
         <div className="flex gap-2">
           {(['24h', '7d', '30d'] as const).map(p => (
@@ -348,32 +374,61 @@ export function DashboardPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <MetricCard
-            label="DMs Sent Today"
-            value={metrics.dmsSentToday.toLocaleString()}
-            icon={<MessageSquare className="w-4 h-4" />}
-          />
-          <MetricCard
-            label="Active Flows"
-            value={metrics.activeFlows}
-            subtitle={`${metrics.pausedFlows} paused`}
-            icon={<Zap className="w-4 h-4" />}
-            iconColor="text-amber-400"
-          />
-          <MetricCard
-            label="Conversations"
-            value={metrics.conversationsBot + metrics.conversationsHuman}
-            subtitle={`Bot: ${metrics.conversationsBot} · Human: ${metrics.conversationsHuman}`}
-            icon={<Users className="w-4 h-4" />}
-            iconColor="text-green-400"
-          />
-          <MetricCard
-            label="AI Credits Saved"
-            value={metrics.aiCreditsSaved}
-            change={{ value: metrics.cacheHitRate, positive: true }}
-            icon={<Brain className="w-4 h-4" />}
-            iconColor="text-cyan-400"
-          />
+          {/* DMs Sent - blue gradient */}
+          <div className="relative overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-[#111318] to-[#111318] p-4">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] text-[#4B5068]">Today</span>
+            </div>
+            <p className="text-2xl font-bold text-[#F0F2FF]">{metrics.dmsSentToday.toLocaleString()}</p>
+            <p className="text-xs text-[#8B90A7] mt-1">DMs Sent</p>
+          </div>
+
+          {/* Active Flows - amber gradient */}
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-[#111318] to-[#111318] p-4">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+                <Zap className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] text-[#4B5068]">{metrics.pausedFlows} paused</span>
+            </div>
+            <p className="text-2xl font-bold text-[#F0F2FF]">{metrics.activeFlows}</p>
+            <p className="text-xs text-[#8B90A7] mt-1">Active Flows</p>
+          </div>
+
+          {/* Conversations - green gradient */}
+          <div className="relative overflow-hidden rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/10 via-[#111318] to-[#111318] p-4">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl bg-green-500/20 flex items-center justify-center text-green-400">
+                <Users className="w-4 h-4" />
+              </div>
+              {metrics.conversationsRed > 0 && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20">
+                  {metrics.conversationsRed} red
+                </span>
+              )}
+            </div>
+            <p className="text-2xl font-bold text-[#F0F2FF]">{metrics.conversationsBot + metrics.conversationsHuman}</p>
+            <p className="text-xs text-[#8B90A7] mt-1">Conversations (24h)</p>
+          </div>
+
+          {/* AI Credits - cyan gradient */}
+          <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 via-[#111318] to-[#111318] p-4">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <Brain className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] text-green-400 font-medium">{metrics.cacheHitRate}</span>
+            </div>
+            <p className="text-2xl font-bold text-[#F0F2FF]">{metrics.aiCreditsSaved}</p>
+            <p className="text-xs text-[#8B90A7] mt-1">AI Credits Saved</p>
+          </div>
         </div>
       )}
 
@@ -551,22 +606,63 @@ export function DashboardPage() {
         <h2 className="text-sm font-semibold text-[#F0F2FF] mb-3">Quick Actions</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Create Flow', icon: <Zap className="w-4 h-4" />, action: () => navigate('/flows'), primary: true },
-            { label: 'New Broadcast', icon: <Megaphone className="w-4 h-4" />, action: () => navigate('/broadcasts') },
-            { label: 'Import Contacts', icon: <UserPlus className="w-4 h-4" />, action: () => navigate('/contacts') },
-            { label: 'Test Webhook', icon: <TestTube2 className="w-4 h-4" />, action: () => {} },
+            {
+              label: 'Create Flow',
+              desc: 'Build a new automation',
+              icon: <Zap className="w-5 h-5" />,
+              action: () => navigate('/flows'),
+              gradient: 'from-blue-500/20 to-blue-500/5',
+              border: 'border-blue-500/30',
+              iconBg: 'bg-blue-500/20',
+              iconColor: 'text-blue-400',
+              textColor: 'text-blue-300',
+            },
+            {
+              label: 'Send Broadcast',
+              desc: 'Message your audience',
+              icon: <Megaphone className="w-5 h-5" />,
+              action: () => navigate('/broadcasts'),
+              gradient: 'from-purple-500/20 to-purple-500/5',
+              border: 'border-purple-500/30',
+              iconBg: 'bg-purple-500/20',
+              iconColor: 'text-purple-400',
+              textColor: 'text-purple-300',
+            },
+            {
+              label: 'Import Contacts',
+              desc: 'Add or sync contacts',
+              icon: <UserPlus className="w-5 h-5" />,
+              action: () => navigate('/contacts'),
+              gradient: 'from-green-500/20 to-green-500/5',
+              border: 'border-green-500/30',
+              iconBg: 'bg-green-500/20',
+              iconColor: 'text-green-400',
+              textColor: 'text-green-300',
+            },
+            {
+              label: 'Test Webhook',
+              desc: 'Debug your integrations',
+              icon: <TestTube2 className="w-5 h-5" />,
+              action: () => navigate('/health'),
+              gradient: 'from-amber-500/20 to-amber-500/5',
+              border: 'border-amber-500/30',
+              iconBg: 'bg-amber-500/20',
+              iconColor: 'text-amber-400',
+              textColor: 'text-amber-300',
+            },
           ].map(item => (
             <button
               key={item.label}
               onClick={item.action}
-              className={`flex items-center gap-3 p-4 rounded-xl border transition-all duration-150 active:scale-[0.98] ${
-                item.primary
-                  ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 active:bg-blue-500/25'
-                  : 'bg-[#1A1C24] border-[#2A2E42] text-[#8B90A7] hover:bg-[#222530] hover:text-[#F0F2FF]'
-              }`}
+              className={`group flex items-center gap-3 p-4 rounded-xl border bg-gradient-to-br ${item.gradient} ${item.border} transition-all duration-150 active:scale-[0.98] hover:brightness-110 text-left`}
             >
-              {item.icon}
-              <span className="text-sm font-medium">{item.label}</span>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${item.iconBg} ${item.iconColor} transition-transform group-hover:scale-110`}>
+                {item.icon}
+              </div>
+              <div className="min-w-0">
+                <p className={`text-sm font-semibold ${item.textColor}`}>{item.label}</p>
+                <p className="text-[10px] text-[#4B5068] mt-0.5">{item.desc}</p>
+              </div>
             </button>
           ))}
         </div>

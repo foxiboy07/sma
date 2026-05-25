@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Filter, Send, Smile, Image, Link2, FileText,
   MoreVertical, ChevronRight, Brain, User, X,
   AlertTriangle, ExternalLink, Tag,
-  BarChart3, Trash2, Loader2, ShoppingBag
+  BarChart3, Trash2, Loader2, ShoppingBag, CheckCheck, Check,
+  MessageSquare, ChevronDown, UserCheck
 } from 'lucide-react';
 import { Badge, Toggle, LoyaltyBadge, PlatformIcon } from '../components/ui';
 import { supabase } from '../lib/supabase';
@@ -55,7 +56,22 @@ interface ContactData {
   currentNode: string | null;
 }
 
+interface TeamMember {
+  id: string;
+  display_name: string;
+  email: string;
+}
+
 type StatusFilter = 'all' | 'BOT' | 'HUMAN' | 'Priority Red' | 'CLOSED';
+
+const QUICK_REPLIES = [
+  { label: 'Thanks for reaching out!', text: 'Thanks for reaching out! How can I help you today?' },
+  { label: 'Order status', text: 'I can help you check your order status. Could you please provide your order number?' },
+  { label: 'Shipping info', text: 'We typically ship within 1-3 business days. You\'ll receive a tracking number via email once your order ships.' },
+  { label: 'Return policy', text: 'We offer hassle-free returns within 30 days of purchase. Just initiate the return from your account page.' },
+  { label: 'Discount code', text: 'I\'d be happy to help with that! Let me check what offers are currently available for you.' },
+  { label: 'Talk to human', text: 'I\'ll connect you with one of our team members right away. Please hold on for a moment.' },
+];
 
 function formatTimeAgo(dateStr: string): string {
   if (!dateStr) return '';
@@ -96,6 +112,10 @@ export function InboxPage() {
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
 
+  // Message search state
+  const [messageSearch, setMessageSearch] = useState('');
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+
   // Contact panel state
   const [contact, setContact] = useState<ContactData | null>(null);
   const [contactLoading, setContactLoading] = useState(false);
@@ -109,7 +129,21 @@ export function InboxPage() {
 
   // Emoji picker state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const emojiPickerRef = React.useRef<HTMLDivElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // Quick replies state
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const quickRepliesRef = useRef<HTMLDivElement>(null);
+
+  // Assign to agent state
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [assignedAgent, setAssignedAgent] = useState<string | null>(null);
+  const [showAssignDropdown, setShowAssignDropdown] = useState(false);
+  const [teamMembersLoading, setTeamMembersLoading] = useState(false);
+  const assignDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Mark as read loading
+  const [markingRead, setMarkingRead] = useState<string | null>(null);
 
   // Product card modal state
   const [showProductModal, setShowProductModal] = useState(false);
@@ -126,7 +160,7 @@ export function InboxPage() {
   ];
 
   // Close emoji picker when clicking outside
-  React.useEffect(() => {
+  useEffect(() => {
     if (!showEmojiPicker) return;
     function handleClick(e: MouseEvent) {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
@@ -136,6 +170,84 @@ export function InboxPage() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showEmojiPicker]);
+
+  // Close quick replies when clicking outside
+  useEffect(() => {
+    if (!showQuickReplies) return;
+    function handleClick(e: MouseEvent) {
+      if (quickRepliesRef.current && !quickRepliesRef.current.contains(e.target as Node)) {
+        setShowQuickReplies(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showQuickReplies]);
+
+  // Close assign dropdown when clicking outside
+  useEffect(() => {
+    if (!showAssignDropdown) return;
+    function handleClick(e: MouseEvent) {
+      if (assignDropdownRef.current && !assignDropdownRef.current.contains(e.target as Node)) {
+        setShowAssignDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showAssignDropdown]);
+
+  // Fetch team members (agents) when assign dropdown opens
+  async function fetchTeamMembers() {
+    if (!tenantId || teamMembers.length > 0) return;
+    setTeamMembersLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('id, display_name, email')
+        .eq('tenant_id', tenantId)
+        .eq('role', 'agent');
+      if (!error) setTeamMembers((data || []) as TeamMember[]);
+    } catch {
+      // ignore
+    } finally {
+      setTeamMembersLoading(false);
+    }
+  }
+
+  async function assignToAgent(agentId: string | null) {
+    if (!activeConv) return;
+    try {
+      await supabase
+        .from('conversations')
+        .update({ assigned_agent_id: agentId })
+        .eq('id', activeConv.id);
+      setAssignedAgent(agentId);
+    } catch (err) {
+      console.error('Failed to assign agent:', err);
+    }
+    setShowAssignDropdown(false);
+  }
+
+  async function markAsRead(convId: string) {
+    setMarkingRead(convId);
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ unread_count: 0 })
+        .eq('id', convId);
+      if (!error) {
+        setConversations(prev =>
+          prev.map(c => c.id === convId ? { ...c, unread_count: 0 } : c)
+        );
+        if (activeConv?.id === convId) {
+          setActiveConv(prev => prev ? { ...prev, unread_count: 0 } : prev);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to mark as read:', err);
+    } finally {
+      setMarkingRead(null);
+    }
+  }
 
   async function fetchProducts() {
     if (!tenantId) return;
@@ -239,7 +351,7 @@ export function InboxPage() {
       const { data, error } = await supabase
         .from('messages')
         .select('id, direction, content, message_type, is_ai_generated, delivery_status, created_at')
-        .eq('conversation_id', activeConv.id)
+        .eq('conversation_id', activeConv!.id)
         .order('created_at', { ascending: true });
 
       if (!cancelled) {
@@ -265,6 +377,11 @@ export function InboxPage() {
       )
       .subscribe();
 
+    // Reset message search when changing conversation
+    setMessageSearch('');
+    setShowMessageSearch(false);
+    setAssignedAgent(null);
+
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
@@ -281,7 +398,7 @@ export function InboxPage() {
 
     async function fetchContact() {
       setContactLoading(true);
-      const contactId = activeConv.unified_contact_id;
+      const contactId = activeConv!.unified_contact_id;
 
       try {
         // Fetch the contact
@@ -392,6 +509,11 @@ export function InboxPage() {
     return true;
   });
 
+  // ---- Filtered messages by search ----
+  const displayedMessages = messageSearch.trim()
+    ? messages.filter(m => m.content?.toLowerCase().includes(messageSearch.toLowerCase()))
+    : messages;
+
   // ---- Send message ----
   async function sendMessage() {
     if (!messageInput.trim() || !activeConv || !tenantId || !brandId) return;
@@ -426,6 +548,7 @@ export function InboxPage() {
     setShowAISuggest(true);
     setAiSuggestLoading(true);
     setAiSuggest('');
+    setTyping(true); // Show typing indicator while AI generates
 
     try {
       // Get the last inbound message for context
@@ -448,6 +571,7 @@ export function InboxPage() {
       setAiSuggest('Failed to generate suggestion. Please try again.');
     } finally {
       setAiSuggestLoading(false);
+      setTyping(false); // Hide typing indicator
     }
   }
 
@@ -517,9 +641,11 @@ export function InboxPage() {
   const activeConvName = activeConv?.unified_contacts?.display_name || 'Unknown';
   const activeConvTier = activeConv?.unified_contacts?.loyalty_tier || 'NEWBIE';
 
+  const assignedMember = teamMembers.find(m => m.id === assignedAgent);
+
   return (
     <div className="flex h-full bg-[#0A0B0F]">
-      {/* Left: Conversation List */}
+      {/* Left: Conversation List — hidden on mobile when a conv is active */}
       <div className={`w-full md:w-72 flex flex-col border-r border-[#1E2130] bg-[#111318] flex-shrink-0 ${activeConv ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 border-b border-[#1E2130]">
           <div className="flex items-center justify-between mb-2">
@@ -565,7 +691,14 @@ export function InboxPage() {
           <div className="border-b border-red-500/20 bg-red-500/5 p-2">
             <p className="text-[10px] text-red-400 font-semibold uppercase tracking-wider mb-1.5">Priority Red ({conversations.filter(c => c.priority_red).length})</p>
             {conversations.filter(c => c.priority_red).map(c => (
-              <ConvItem key={c.id} conv={c} active={activeConv?.id === c.id} onClick={() => setActiveConv(c)} />
+              <ConvItem
+                key={c.id}
+                conv={c}
+                active={activeConv?.id === c.id}
+                onClick={() => setActiveConv(c)}
+                onMarkRead={markAsRead}
+                markingRead={markingRead === c.id}
+              />
             ))}
           </div>
         )}
@@ -580,13 +713,20 @@ export function InboxPage() {
             <div className="text-center py-8 text-xs text-[#4B5068]">No conversations</div>
           ) : (
             filtered.filter(c => statusFilter === 'all' ? !c.priority_red : true).map(c => (
-              <ConvItem key={c.id} conv={c} active={activeConv?.id === c.id} onClick={() => setActiveConv(c)} />
+              <ConvItem
+                key={c.id}
+                conv={c}
+                active={activeConv?.id === c.id}
+                onClick={() => setActiveConv(c)}
+                onMarkRead={markAsRead}
+                markingRead={markingRead === c.id}
+              />
             ))
           )}
         </div>
       </div>
 
-      {/* Center: Thread */}
+      {/* Center: Thread — on mobile, full screen when conv is active */}
       <div className={`flex-1 flex flex-col min-w-0 ${!activeConv ? 'hidden md:flex' : 'flex'}`}>
         {activeConv ? (
           <>
@@ -608,7 +748,70 @@ export function InboxPage() {
                   </Badge>
                 </div>
               </div>
-              <div className="flex items-center gap-2 md:gap-3">
+              <div className="flex items-center gap-1.5 md:gap-2">
+                {/* Message search toggle */}
+                <button
+                  onClick={() => setShowMessageSearch(p => !p)}
+                  className={`w-8 h-8 md:w-7 md:h-7 flex items-center justify-center rounded-lg transition-colors ${showMessageSearch ? 'text-blue-400 bg-blue-500/10' : 'text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]'}`}
+                  title="Search messages"
+                >
+                  <Search className="w-4 h-4 md:w-3.5 md:h-3.5" />
+                </button>
+
+                {/* Assign to Agent dropdown */}
+                <div className="relative" ref={assignDropdownRef}>
+                  <button
+                    onClick={() => { setShowAssignDropdown(p => !p); fetchTeamMembers(); }}
+                    className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${assignedAgent ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24] border border-[#2A2E42]'}`}
+                    title="Assign to agent"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">{assignedMember ? assignedMember.display_name : 'Assign'}</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  {showAssignDropdown && (
+                    <div className="absolute top-full right-0 mt-1 w-52 bg-[#1A1C24] border border-[#2A2E42] rounded-xl shadow-2xl z-50 overflow-hidden">
+                      <div className="px-3 py-2 border-b border-[#2A2E42]">
+                        <p className="text-[10px] font-semibold text-[#4B5068] uppercase tracking-wider">Assign to Agent</p>
+                      </div>
+                      {teamMembersLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-4 h-4 text-[#4B5068] animate-spin" />
+                        </div>
+                      ) : teamMembers.length === 0 ? (
+                        <div className="px-3 py-4 text-xs text-[#4B5068]">No agents found</div>
+                      ) : (
+                        <>
+                          {assignedAgent && (
+                            <button
+                              onClick={() => assignToAgent(null)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" /> Unassign
+                            </button>
+                          )}
+                          {teamMembers.map(member => (
+                            <button
+                              key={member.id}
+                              onClick={() => assignToAgent(member.id)}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs hover:bg-[#222530] transition-colors ${assignedAgent === member.id ? 'text-green-400' : 'text-[#F0F2FF]'}`}
+                            >
+                              <div className="w-6 h-6 rounded-full bg-[#222530] flex items-center justify-center text-[10px] font-bold text-[#8B90A7] flex-shrink-0">
+                                {member.display_name.charAt(0)}
+                              </div>
+                              <div className="flex-1 text-left min-w-0">
+                                <p className="truncate font-medium">{member.display_name}</p>
+                                <p className="text-[10px] text-[#4B5068] truncate">{member.email}</p>
+                              </div>
+                              {assignedAgent === member.id && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="hidden md:flex items-center gap-2">
                   <span className="text-xs text-[#8B90A7]">{humanMode ? 'Human mode — bot paused' : 'Bot active'}</span>
                   <Toggle checked={humanMode} onChange={handleHumanModeToggle} size="sm" />
@@ -621,6 +824,30 @@ export function InboxPage() {
                 </button>
               </div>
             </div>
+
+            {/* Message search bar */}
+            {showMessageSearch && (
+              <div className="px-3 md:px-4 py-2 border-b border-[#1E2130] bg-[#111318]">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#4B5068]" />
+                  <input
+                    autoFocus
+                    value={messageSearch}
+                    onChange={e => setMessageSearch(e.target.value)}
+                    placeholder="Search messages in this conversation..."
+                    className="w-full h-8 pl-8 pr-8 rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-xs text-[#F0F2FF] placeholder:text-[#4B5068] focus:outline-none focus:border-blue-500"
+                  />
+                  {messageSearch && (
+                    <button onClick={() => setMessageSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                      <X className="w-3.5 h-3.5 text-[#4B5068] hover:text-[#F0F2FF]" />
+                    </button>
+                  )}
+                </div>
+                {messageSearch && (
+                  <p className="text-[10px] text-[#4B5068] mt-1">{displayedMessages.length} result{displayedMessages.length !== 1 ? 's' : ''}</p>
+                )}
+              </div>
+            )}
 
             {/* Priority Red Banner */}
             {activeConv.priority_red && (
@@ -641,10 +868,12 @@ export function InboxPage() {
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-5 h-5 text-[#4B5068] animate-spin" />
                 </div>
-              ) : messages.length === 0 ? (
-                <div className="text-center py-8 text-xs text-[#4B5068]">No messages yet</div>
+              ) : displayedMessages.length === 0 ? (
+                <div className="text-center py-8 text-xs text-[#4B5068]">
+                  {messageSearch ? 'No messages match your search' : 'No messages yet'}
+                </div>
               ) : (
-                messages.map((msg) => (
+                displayedMessages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'} gap-2`}>
                     {msg.direction === 'INBOUND' && (
                       <div className="w-7 h-7 rounded-full bg-[#222530] flex items-center justify-center text-xs font-bold text-[#8B90A7] flex-shrink-0">
@@ -662,15 +891,25 @@ export function InboxPage() {
                         </div>
                       ) : (
                         <div className={`px-3 py-2 rounded-2xl text-sm ${msg.direction === 'OUTBOUND' ? 'bg-blue-500/20 border border-blue-500/30 rounded-tr-sm' : 'bg-[#1A1C24] border border-[#2A2E42] rounded-tl-sm'} text-[#F0F2FF] max-w-[85vw] md:max-w-[60%]`}>
-                          {msg.content}
+                          {/* Highlight search match */}
+                          {messageSearch && msg.content ? (
+                            <HighlightedText text={msg.content} query={messageSearch} />
+                          ) : msg.content}
                         </div>
                       )}
                       <div className={`flex items-center gap-1.5 ${msg.direction === 'OUTBOUND' ? 'flex-row-reverse' : ''}`}>
                         <span className="text-[10px] text-[#4B5068]">{formatMessageTime(msg.created_at)}</span>
                         {msg.is_ai_generated && <span className="text-[10px] px-1 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/20">AI</span>}
+                        {/* Read receipt indicators for outbound messages */}
                         {msg.direction === 'OUTBOUND' && (
-                          <span className={`text-[10px] ${msg.delivery_status === 'DELIVERED' ? 'text-green-400' : 'text-[#4B5068]'}`}>
-                            {msg.delivery_status === 'DELIVERED' ? '\u2713\u2713' : '\u2713'}
+                          <span className={`flex items-center ${msg.delivery_status === 'DELIVERED' ? 'text-blue-400' : msg.delivery_status === 'SENT' ? 'text-[#8B90A7]' : 'text-[#4B5068]'}`} title={msg.delivery_status}>
+                            {msg.delivery_status === 'DELIVERED' ? (
+                              <CheckCheck className="w-3 h-3" />
+                            ) : msg.delivery_status === 'SENT' ? (
+                              <Check className="w-3 h-3" />
+                            ) : (
+                              <Check className="w-3 h-3 opacity-40" />
+                            )}
                           </span>
                         )}
                       </div>
@@ -679,16 +918,16 @@ export function InboxPage() {
                 ))
               )}
 
-              {/* Typing indicator */}
-              {typing && (
+              {/* Typing indicator — shown while AI is generating */}
+              {(typing || aiSuggestLoading) && (
                 <div className="flex justify-start gap-2">
                   <div className="w-7 h-7 rounded-full bg-[#222530] flex items-center justify-center text-xs font-bold text-[#8B90A7] flex-shrink-0">
-                    {activeConvName.charAt(0)}
+                    <Brain className="w-3.5 h-3.5 text-blue-400" />
                   </div>
                   <div className="px-3 py-2.5 rounded-2xl rounded-tl-sm bg-[#1A1C24] border border-[#2A2E42] flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#8B90A7] typing-dot" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#8B90A7] typing-dot" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#8B90A7] typing-dot" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
               )}
@@ -721,7 +960,7 @@ export function InboxPage() {
 
             {/* Input Area */}
             <div className="border-t border-[#1E2130] bg-[#111318] p-3 safe-area-inset-bottom">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 {/* Emoji Picker */}
                 <div className="relative" ref={emojiPickerRef}>
                   <button
@@ -731,13 +970,13 @@ export function InboxPage() {
                     <Smile className="w-4 h-4 md:w-3.5 md:h-3.5" />
                   </button>
                   {showEmojiPicker && (
-                    <div className="absolute bottom-full left-0 mb-2 p-2 rounded-xl bg-[#1A1C24] border border-[#2A2E42] shadow-2xl z-50 w-56">
+                    <div className="absolute bottom-full left-0 mb-2 p-1.5 rounded-xl bg-[#1A1C24] border border-[#2A2E42] shadow-2xl z-50 w-48 md:w-44">
                       <div className="grid grid-cols-8 gap-0.5">
                         {COMMON_EMOJIS.map(emoji => (
                           <button
                             key={emoji}
                             onClick={() => { setMessageInput(prev => prev + emoji); setShowEmojiPicker(false); }}
-                            className="w-6 h-6 flex items-center justify-center text-base hover:bg-[#222530] rounded transition-colors"
+                            className="w-5 h-5 flex items-center justify-center text-sm md:text-xs hover:bg-[#222530] rounded transition-colors"
                             title={emoji}
                           >
                             {emoji}
@@ -758,17 +997,48 @@ export function InboxPage() {
                 >
                   <ShoppingBag className="w-3.5 h-3.5" />
                 </button>
+
+                {/* Quick Reply Templates */}
+                <div className="relative" ref={quickRepliesRef}>
+                  <button
+                    onClick={() => setShowQuickReplies(p => !p)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${showQuickReplies ? 'text-blue-400 bg-blue-500/10' : 'text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24]'}`}
+                    title="Quick replies"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Quick</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  {showQuickReplies && (
+                    <div className="absolute bottom-full left-0 mb-2 w-64 bg-[#1A1C24] border border-[#2A2E42] rounded-xl shadow-2xl z-50 overflow-hidden">
+                      <div className="px-3 py-2 border-b border-[#2A2E42]">
+                        <p className="text-[10px] font-semibold text-[#4B5068] uppercase tracking-wider">Quick Replies</p>
+                      </div>
+                      {QUICK_REPLIES.map((qr, i) => (
+                        <button
+                          key={i}
+                          onClick={() => { setMessageInput(qr.text); setShowQuickReplies(false); }}
+                          className="w-full flex flex-col items-start px-3 py-2.5 hover:bg-[#222530] transition-colors border-b border-[#1E2130] last:border-0"
+                        >
+                          <span className="text-xs font-medium text-[#F0F2FF]">{qr.label}</span>
+                          <span className="text-[10px] text-[#4B5068] truncate w-full mt-0.5">{qr.text}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <button onClick={getSuggest} disabled={aiSuggestLoading} className="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-400 hover:bg-blue-500/10 font-medium disabled:opacity-50">
-                  <Brain className="w-3.5 h-3.5" /> AI Suggest
+                  <Brain className="w-3.5 h-3.5" /> AI
                 </button>
-                <span className="ml-auto text-[10px] text-[#4B5068]">Sending via {activeConv.platform.charAt(0) + activeConv.platform.slice(1).toLowerCase()}</span>
+                <span className="ml-auto text-[10px] text-[#4B5068] hidden sm:inline">via {activeConv.platform.charAt(0) + activeConv.platform.slice(1).toLowerCase()}</span>
               </div>
               <div className="flex gap-2">
                 <textarea
                   value={messageInput}
                   onChange={e => setMessageInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMessage(); }}
-                  placeholder="Type a message... (\u2318\u21B5 to send)"
+                  placeholder={`Type a message... (\u2318\u21B5 to send)`}
                   rows={2}
                   className="flex-1 rounded-xl bg-[#1A1C24] border border-[#2A2E42] text-sm text-[#F0F2FF] placeholder:text-[#4B5068] px-3 py-2 focus:outline-none focus:border-blue-500 resize-none"
                 />
@@ -847,7 +1117,7 @@ export function InboxPage() {
 
       {/* Right: Contact Card */}
       {showContactPanel && (
-        <div className="w-72 flex-shrink-0 border-l border-[#1E2130] bg-[#111318] overflow-y-auto">
+        <div className="hidden md:block w-72 flex-shrink-0 border-l border-[#1E2130] bg-[#111318] overflow-y-auto">
           {contactLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 text-[#4B5068] animate-spin" />
@@ -980,14 +1250,44 @@ export function InboxPage() {
   );
 }
 
-function ConvItem({ conv, active, onClick }: { conv: ConvRow; active: boolean; onClick: () => void }) {
+// Highlights search term inside a message
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <mark key={i} className="bg-yellow-400/30 text-yellow-300 rounded px-0.5">{part}</mark>
+          : part
+      )}
+    </>
+  );
+}
+
+function ConvItem({
+  conv,
+  active,
+  onClick,
+  onMarkRead,
+  markingRead,
+}: {
+  conv: ConvRow;
+  active: boolean;
+  onClick: () => void;
+  onMarkRead: (id: string) => void;
+  markingRead: boolean;
+}) {
   const name = conv.unified_contacts?.display_name || 'Unknown';
   const tier = conv.unified_contacts?.loyalty_tier || 'NEWBIE';
+  const [showActions, setShowActions] = React.useState(false);
 
   return (
     <div
+      className={`relative flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors border-b border-[#1E2130] group ${active ? 'bg-blue-500/10 border-l-2 border-l-blue-500' : 'hover:bg-[#1A1C24]'}`}
       onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors border-b border-[#1E2130] ${active ? 'bg-blue-500/10 border-l-2 border-l-blue-500' : 'hover:bg-[#1A1C24]'}`}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
     >
       <div className="relative flex-shrink-0">
         <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white bg-gradient-to-br from-[#2A2E42] to-[#1A1C24] ${conv.priority_red ? 'ring-2 ring-red-400 priority-red-pulse' : ''}`}>
@@ -1007,7 +1307,24 @@ function ConvItem({ conv, active, onClick }: { conv: ConvRow; active: boolean; o
       <div className="flex flex-col items-end gap-1 flex-shrink-0">
         <LoyaltyBadge tier={tier} />
         {conv.unread_count > 0 && (
-          <span className="w-4 h-4 flex items-center justify-center bg-blue-500 text-white text-[9px] font-bold rounded-full">{conv.unread_count}</span>
+          <div className="flex items-center gap-1">
+            <span className="w-4 h-4 flex items-center justify-center bg-blue-500 text-white text-[9px] font-bold rounded-full">{conv.unread_count}</span>
+            {/* Mark as read button appears on hover */}
+            {showActions && (
+              <button
+                onClick={e => { e.stopPropagation(); onMarkRead(conv.id); }}
+                disabled={markingRead}
+                title="Mark as read"
+                className="w-4 h-4 flex items-center justify-center rounded-full bg-[#2A2E42] hover:bg-blue-500/20 transition-colors"
+              >
+                {markingRead ? (
+                  <Loader2 className="w-2.5 h-2.5 text-[#4B5068] animate-spin" />
+                ) : (
+                  <CheckCheck className="w-2.5 h-2.5 text-[#4B5068] hover:text-blue-400" />
+                )}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

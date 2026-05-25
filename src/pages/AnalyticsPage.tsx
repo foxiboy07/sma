@@ -324,7 +324,7 @@ export function AnalyticsPage() {
   };
 
   return (
-    <div className="p-6 max-w-[1400px]">
+    <div className="p-4 md:p-6 max-w-[1400px]">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-[#F0F2FF]">Analytics</h1>
         <div className="flex items-center gap-3">
@@ -337,22 +337,23 @@ export function AnalyticsPage() {
         </div>
       </div>
 
-      <Tabs
-        tabs={[
-          { id: 'overview', label: 'Overview' },
-          { id: 'flows', label: 'Flows' },
-          { id: 'ai', label: 'AI' },
-          { id: 'attribution', label: 'Attribution' },
-          { id: 'ghost', label: 'Ghost A/B' },
-        ]}
-        active={activeTab}
-        onChange={setActiveTab}
-        className="mb-6"
-      />
+      <div className="overflow-x-auto mb-6">
+        <Tabs
+          tabs={[
+            { id: 'overview', label: 'Overview' },
+            { id: 'flows', label: 'Flows' },
+            { id: 'ai', label: 'AI' },
+            { id: 'attribution', label: 'Attribution' },
+            { id: 'ghost', label: 'Ghost A/B' },
+          ]}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
+      </div>
 
       {loading && !data ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
           </div>
           <Skeleton className="h-64 rounded-xl" />
@@ -376,7 +377,7 @@ function OverviewTab({ data }: { data: AnalyticsData }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
           { label: 'Messages Sent', value: metrics.messagesSent.toLocaleString(), change: metrics.messagesSentChange, positive: metrics.messagesSentChange.startsWith('+') },
           { label: 'Conversations', value: metrics.conversations.toLocaleString(), change: metrics.conversationsChange, positive: metrics.conversationsChange.startsWith('+') },
@@ -393,8 +394,8 @@ function OverviewTab({ data }: { data: AnalyticsData }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="md:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-[#F0F2FF]">Messages Over Time</h2>
             <div className="flex gap-3 text-[10px] text-[#8B90A7]">
@@ -476,8 +477,8 @@ function FlowsTab({ data }: { data: AnalyticsData }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden">
-        <table className="w-full">
+      <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden overflow-x-auto">
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-[#1E2130]">
               {['Flow Name', 'Triggered', 'Completion%', 'Conv%', 'Revenue', 'Ghost Active'].map(h => (
@@ -520,7 +521,7 @@ function AITab({ data }: { data: AnalyticsData }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <p className="text-xs text-[#8B90A7] uppercase tracking-wider mb-2">AI Spend This Month</p>
           <p className="text-2xl font-bold text-[#F0F2FF]">${totalCost.toFixed(2)}</p>
@@ -560,7 +561,7 @@ function AITab({ data }: { data: AnalyticsData }) {
         </Card>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <h2 className="text-sm font-semibold text-[#F0F2FF] mb-4">AI Cost Over Time</h2>
           <ResponsiveContainer width="100%" height={180}>
@@ -604,8 +605,8 @@ function AttributionTab({ data }: { data: AnalyticsData }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="md:col-span-2">
           <h2 className="text-sm font-semibold text-[#F0F2FF] mb-4">DM Interactions vs Purchases</h2>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={areaData.slice(-14)}>

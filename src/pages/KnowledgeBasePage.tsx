@@ -307,7 +307,7 @@ export function KnowledgeBasePage() {
   return (
     <div className="flex flex-col h-full">
       {/* Top Bar */}
-      <div className="flex-shrink-0 border-b border-[#1E2130] bg-[#111318] px-6 py-4">
+      <div className="flex-shrink-0 border-b border-[#1E2130] bg-[#111318] px-4 md:px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-teal-500/20">
@@ -329,7 +329,7 @@ export function KnowledgeBasePage() {
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'Sources', value: docs.length, icon: <BookOpen className="w-3.5 h-3.5" />, color: 'text-blue-400' },
             { label: 'Indexed', value: indexedCount, icon: <CheckCircle2 className="w-3.5 h-3.5" />, color: 'text-green-400' },
@@ -347,10 +347,25 @@ export function KnowledgeBasePage() {
         </div>
       </div>
 
+      {/* Mobile document selector dropdown */}
+      {docs.length > 0 && (
+        <div className="md:hidden flex-shrink-0 px-4 py-2 border-b border-[#1E2130] bg-[#111318]">
+          <select
+            value={selected?.id ?? ''}
+            onChange={e => setSelected(docs.find(d => d.id === e.target.value) ?? null)}
+            className="w-full h-9 rounded-lg bg-[#0A0B0F] border border-[#1E2130] text-xs text-[#F0F2FF] px-3 focus:outline-none focus:border-blue-500/50"
+          >
+            {docs.map(d => (
+              <option key={d.id} value={d.id}>{d.source_type === 'QA' ? d.qa_question || d.name : d.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Document list */}
-        <div className="w-80 flex flex-col border-r border-[#1E2130] bg-[#111318] flex-shrink-0">
+        {/* Left: Document list — hidden on mobile */}
+        <div className="hidden md:flex w-80 flex-col border-r border-[#1E2130] bg-[#111318] flex-shrink-0">
           {/* Search + Add buttons */}
           <div className="p-3 border-b border-[#1E2130] space-y-2">
             <div className="relative">
@@ -437,7 +452,7 @@ export function KnowledgeBasePage() {
         {/* Right: Detail panel */}
         {selected ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-3xl mx-auto p-6 space-y-5">
+            <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-5">
               {/* Document Header */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -557,7 +572,7 @@ export function KnowledgeBasePage() {
               )}
 
               {/* Settings Grid */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Strictness */}
                 <Card>
                   <div className="flex items-center gap-2 mb-3">
@@ -708,7 +723,7 @@ export function KnowledgeBasePage() {
                   <Zap className="w-4 h-4 text-amber-400" />
                   <h3 className="text-sm font-semibold text-[#F0F2FF]">How It Works</h3>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     { step: '1', title: 'Train', desc: 'Upload URLs, PDFs, text, or Q&A pairs. Content is chunked and embedded.', icon: <Upload className="w-4 h-4 text-blue-400" /> },
                     { step: '2', title: 'Retrieve', desc: 'When a customer asks, relevant chunks are found by semantic similarity.', icon: <Search className="w-4 h-4 text-teal-400" /> },

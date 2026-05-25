@@ -1005,7 +1005,7 @@ export function GrowthToolsPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0B0F]">
-      <div className="p-6 max-w-[1400px] space-y-6">
+      <div className="p-4 md:p-6 max-w-[1400px] space-y-6">
 
         {/* ---- Header ---- */}
         <div className="flex items-start justify-between gap-4">
@@ -1081,11 +1081,13 @@ export function GrowthToolsPage() {
 
         {/* ---- Tabs + grid ---- */}
         <div className="space-y-4">
-          <Tabs
-            tabs={tabs}
-            active={activeTab}
-            onChange={(id) => setActiveTab(id as typeof activeTab)}
-          />
+          <div className="overflow-x-auto">
+            <Tabs
+              tabs={tabs}
+              active={activeTab}
+              onChange={(id) => setActiveTab(id as typeof activeTab)}
+            />
+          </div>
 
           {loading ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -1155,7 +1157,7 @@ export function GrowthToolsPage() {
         {tools.length > 0 && (
           <div className="bg-[#111318] border border-[#2A2E42] rounded-2xl p-5">
             <h2 className="text-sm font-semibold text-[#F0F2FF] mb-4">Platform Breakdown</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {(['INSTAGRAM', 'FACEBOOK', 'TIKTOK'] as Platform[]).map(platform => {
                 const platformTools = tools.filter(t => t.platform === platform);
                 const pClicks = platformTools.reduce((s, t) => s + t.click_count, 0);

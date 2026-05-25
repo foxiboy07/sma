@@ -192,8 +192,8 @@ function FilterRow({ rule, onChange, onRemove, canRemove }: FilterRowProps) {
   };
 
   return (
-    <div className="flex items-center gap-2 group">
-      <div className="flex-1 grid grid-cols-3 gap-2">
+    <div className="flex items-start gap-2 group">
+      <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
         <Select
           options={FIELD_OPTIONS}
           value={rule.field}
@@ -603,7 +603,7 @@ export function SegmentsPage() {
   // ---- Render --------------------------------------------------------------
 
   return (
-    <div className="p-6 max-w-[1400px]">
+    <div className="p-4 md:p-6 max-w-[1400px]">
       {/* ---- Header ---- */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -618,7 +618,7 @@ export function SegmentsPage() {
       </div>
 
       {/* ---- Metric cards ---- */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <MetricCard
           label="Total Segments"
           value={segments.length}
@@ -684,7 +684,7 @@ export function SegmentsPage() {
       )}
 
       {!loading && filtered.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(seg => (
             <SegmentCard
               key={seg.id}
@@ -829,7 +829,7 @@ export function SegmentsPage() {
             )}
 
             {/* Action row */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button variant="primary" size="sm" onClick={() => navigate(`/broadcasts?segment=${activeSegment.id}`)}>
                 <Send className="w-3.5 h-3.5" /> Use in Broadcast
               </Button>
@@ -857,7 +857,7 @@ export function SegmentsPage() {
 
             {/* Contacts list */}
             {detailTab === 'contacts' && (
-              <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden">
+              <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden overflow-x-auto">
                 {detailLoading ? (
                   <div className="flex items-center justify-center py-10">
                     <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -870,7 +870,7 @@ export function SegmentsPage() {
                     description="Add contacts manually or adjust filter rules to match your audience."
                   />
                 ) : (
-                  <table className="w-full">
+                  <table className="w-full min-w-[480px]">
                     <thead>
                       <tr className="border-b border-[#1E2130]">
                         {['Contact', 'Tier', 'Sentiment', 'Tags', 'Joined'].map(h => (

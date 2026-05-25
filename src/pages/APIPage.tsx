@@ -144,14 +144,14 @@ export function APIPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="p-4 md:p-6 max-w-3xl space-y-6">
       <div>
         <h2 className="text-lg font-bold text-[#F0F2FF] mb-0.5">API & Webhooks</h2>
         <p className="text-xs text-[#8B90A7]">Manage API keys, configure outbound webhooks, and explore the REST API</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-[#111318] rounded-xl border border-[#1E2130] w-fit">
+      <div className="flex gap-1 p-1 bg-[#111318] rounded-xl border border-[#1E2130] w-fit overflow-x-auto">
         {[
           { id: 'keys', label: 'API Keys', icon: <Code2 className="w-3.5 h-3.5" /> },
           { id: 'webhooks', label: 'Webhooks', icon: <Webhook className="w-3.5 h-3.5" /> },
@@ -160,7 +160,7 @@ export function APIPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === tab.id ? 'bg-[#1A1C24] text-[#F0F2FF] shadow-sm' : 'text-[#8B90A7] hover:text-[#F0F2FF]'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-[#1A1C24] text-[#F0F2FF] shadow-sm' : 'text-[#8B90A7] hover:text-[#F0F2FF]'}`}
           >
             {tab.icon}{tab.label}
           </button>
@@ -242,7 +242,7 @@ export function APIPage() {
                 { endpoint: 'POST /broadcasts', limit: '10 req/min', remaining: 8 },
                 { endpoint: 'GET /analytics', limit: '100 req/min', remaining: 97 },
               ].map(r => (
-                <div key={r.endpoint} className="flex items-center justify-between py-2 border-b border-[#1E2130] last:border-0">
+                <div key={r.endpoint} className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-[#1E2130] last:border-0 gap-2">
                   <code className="text-xs font-mono text-blue-400">{r.endpoint}</code>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-[#4B5068]">{r.limit}</span>
@@ -365,11 +365,13 @@ export function APIPage() {
                 { method: 'POST', path: '/broadcasts', desc: 'Create and schedule a broadcast campaign' },
                 { method: 'GET', path: '/analytics/overview', desc: 'Get aggregated metrics for a date range' },
               ].map(endpoint => (
-                <div key={endpoint.path} className="flex items-center gap-3 p-3 rounded-xl bg-[#0A0B0F] border border-[#1E2130]">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md font-mono flex-shrink-0 w-12 text-center ${endpoint.method === 'GET' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                    {endpoint.method}
-                  </span>
-                  <code className="text-xs font-mono text-[#F0F2FF] flex-shrink-0 w-52">{endpoint.path}</code>
+                <div key={endpoint.path} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl bg-[#0A0B0F] border border-[#1E2130]">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md font-mono flex-shrink-0 w-12 text-center ${endpoint.method === 'GET' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                      {endpoint.method}
+                    </span>
+                    <code className="text-xs font-mono text-[#F0F2FF]">{endpoint.path}</code>
+                  </div>
                   <span className="text-xs text-[#8B90A7]">{endpoint.desc}</span>
                 </div>
               ))}

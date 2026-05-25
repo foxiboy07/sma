@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import {
   Search, Star, Download, Eye, Zap, MessageSquare, ShoppingCart,
-  UserCheck, BarChart2, Gift, Clock, Globe, Filter, X, Play,
+  UserCheck, BarChart2, Gift, Globe, X, Play,
   CheckCircle2, TrendingUp, Users, Lock
 } from 'lucide-react';
 import { Button, Card, Badge, Modal } from '../components/ui';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { TriggerType } from '../types';
 
 const CATEGORIES = [
   { id: 'all', label: 'All Templates' },
@@ -27,6 +31,7 @@ const TEMPLATES = [
     uses: 12400,
     nodes: 8,
     trigger: 'Story Reply',
+    trigger_type: 'STORY_REPLY' as TriggerType,
     conversionRate: '23%',
     icon: ShoppingCart,
     iconColor: '#E1306C',
@@ -43,13 +48,14 @@ const TEMPLATES = [
   {
     id: '2',
     name: 'Abandoned Cart Recovery',
-    desc: 'Re-engage users who added items to cart but didn\'t purchase. Sends timed reminder DMs with a discount.',
+    desc: "Re-engage users who added items to cart but didn't purchase. Sends timed reminder DMs with a discount.",
     category: 'recovery',
     platform: ['INSTAGRAM', 'FACEBOOK'],
     rating: 4.8,
     uses: 8900,
     nodes: 6,
     trigger: 'Webhook: Cart Abandon',
+    trigger_type: 'MANUAL' as TriggerType,
     conversionRate: '18%',
     icon: ShoppingCart,
     iconColor: '#F59E0B',
@@ -73,6 +79,7 @@ const TEMPLATES = [
     uses: 6200,
     nodes: 10,
     trigger: 'DM Keyword: "price", "info"',
+    trigger_type: 'COMMENT_TO_DM' as TriggerType,
     conversionRate: '34%',
     icon: UserCheck,
     iconColor: '#3B82F6',
@@ -96,6 +103,7 @@ const TEMPLATES = [
     uses: 15600,
     nodes: 7,
     trigger: 'New Follow',
+    trigger_type: 'FOLLOW_TO_DM' as TriggerType,
     conversionRate: '41%',
     icon: MessageSquare,
     iconColor: '#22C55E',
@@ -119,6 +127,7 @@ const TEMPLATES = [
     uses: 4100,
     nodes: 9,
     trigger: 'Video Comment Keyword',
+    trigger_type: 'TIKTOK_SHOP_COMMENT' as TriggerType,
     conversionRate: '29%',
     icon: ShoppingCart,
     iconColor: '#69C9D0',
@@ -142,6 +151,7 @@ const TEMPLATES = [
     uses: 2800,
     nodes: 5,
     trigger: 'Loyalty Tier Change → ADVOCATE',
+    trigger_type: 'MANUAL' as TriggerType,
     conversionRate: '67%',
     icon: Gift,
     iconColor: '#F59E0B',
@@ -164,6 +174,7 @@ const TEMPLATES = [
     uses: 22100,
     nodes: 6,
     trigger: 'Any DM',
+    trigger_type: 'COMMENT_TO_DM' as TriggerType,
     conversionRate: '89% deflection',
     icon: MessageSquare,
     iconColor: '#8B90A7',
@@ -187,6 +198,7 @@ const TEMPLATES = [
     uses: 9300,
     nodes: 7,
     trigger: 'Post Comment Keyword',
+    trigger_type: 'COMMENT_TO_DM' as TriggerType,
     conversionRate: '93% entry',
     icon: Gift,
     iconColor: '#E1306C',
@@ -209,6 +221,7 @@ const TEMPLATES = [
     uses: 3400,
     nodes: 8,
     trigger: 'Any DM',
+    trigger_type: 'COMMENT_TO_DM' as TriggerType,
     conversionRate: 'Varies',
     icon: BarChart2,
     iconColor: '#3B82F6',
@@ -249,11 +262,14 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 export function TemplatesPage() {
+  const { tenant, brand } = useAuth();
+  const navigate = useNavigate();
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
   const [preview, setPreview] = useState<typeof TEMPLATES[0] | null>(null);
   const [installed, setInstalled] = useState<Set<string>>(new Set());
   const [installing, setInstalling] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const filtered = TEMPLATES.filter(t => {
     const matchCat = category === 'all' || t.category === category;
@@ -261,23 +277,79 @@ export function TemplatesPage() {
     return matchCat && matchSearch;
   });
 
-  async function install(id: string) {
-    setInstalling(id);
-    await new Promise(r => setTimeout(r, 1200));
-    setInstalled(prev => new Set([...prev, id]));
-    setInstalling(null);
+  async function install(template: typeof TEMPLATES[0]) {
+    if (!tenant?.id || !brand?.id) {
+      setError('You must be logged in to install a template.');
+      return;
+    }
+    setInstalling(template.id);
+    setError(null);
+    try {
+      // 1. Insert the flow
+      const { data: flow, error: flowErr } = await supabase
+        .from('flows')
+        .insert({
+          tenant_id: tenant.id,
+          brand_id: brand.id,
+          name: template.name,
+          status: 'DRAFT',
+          trigger_type: template.trigger_type,
+          trigger_config: {},
+          ghost_traffic_pct: 0,
+          triggered_count: 0,
+          conversion_count: 0,
+          revenue_attributed: 0,
+        })
+        .select()
+        .single();
+
+      if (flowErr || !flow) throw new Error(flowErr?.message || 'Failed to create flow');
+
+      // 2. Insert flow_nodes from template preview
+      if (template.preview.length > 0) {
+        const nodes = template.preview.map((node, idx) => ({
+          flow_id: flow.id,
+          tenant_id: tenant.id,
+          node_type: node.type,
+          label: node.label,
+          position_x: 300,
+          position_y: idx * 120,
+          config: {},
+        }));
+        const { error: nodesErr } = await supabase
+          .from('flow_nodes')
+          .insert(nodes);
+        if (nodesErr) console.warn('Could not insert nodes:', nodesErr.message);
+      }
+
+      setInstalled(prev => new Set([...prev, template.id]));
+      // Navigate to the builder
+      navigate(`/flows/${flow.id}/builder`);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to install template. Please try again.');
+    } finally {
+      setInstalling(null);
+    }
   }
 
   return (
-    <div className="p-6 max-w-[1400px]">
+    <div className="p-4 sm:p-6 max-w-[1400px]">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[#F0F2FF]">Template Marketplace</h1>
         <p className="text-xs text-[#8B90A7] mt-0.5">Production-ready flow templates. One click to add to your workspace.</p>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
           { label: 'Total Templates', value: TEMPLATES.length, icon: <Zap className="w-4 h-4" />, color: 'text-blue-400' },
           { label: 'Total Uses', value: '85.3K', icon: <Download className="w-4 h-4" />, color: 'text-green-400' },
@@ -295,8 +367,8 @@ export function TemplatesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
+        <div className="relative w-full sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4B5068]" />
           <input
             value={search}
@@ -310,7 +382,7 @@ export function TemplatesPage() {
             </button>
           )}
         </div>
-        <div className="flex gap-1 p-1 bg-[#111318] rounded-xl border border-[#1E2130] overflow-x-auto">
+        <div className="flex gap-1 p-1 bg-[#111318] rounded-xl border border-[#1E2130] overflow-x-auto w-full sm:w-auto">
           {CATEGORIES.map(cat => (
             <button
               key={cat.id}
@@ -324,7 +396,7 @@ export function TemplatesPage() {
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map(template => {
           const Icon = template.icon;
           const isInstalled = installed.has(template.id);
@@ -412,12 +484,12 @@ export function TemplatesPage() {
                   <Eye className="w-3.5 h-3.5" /> Preview
                 </button>
                 <button
-                  onClick={() => !isInstalled && install(template.id)}
-                  disabled={isInstalling}
+                  onClick={() => !isInstalled && !isInstalling && install(template)}
+                  disabled={isInstalling || isInstalled}
                   className={`flex-1 h-8 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all ${
                     isInstalled
                       ? 'bg-green-500/15 border border-green-500/30 text-green-400 cursor-default'
-                      : 'bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.98]'
+                      : 'bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.98] disabled:opacity-50'
                   }`}
                 >
                   {isInstalling ? (
@@ -456,8 +528,9 @@ export function TemplatesPage() {
               <Button variant="ghost" onClick={() => setPreview(null)}>Close</Button>
               <Button
                 variant="primary"
-                onClick={() => { install(preview.id); setPreview(null); }}
-                disabled={installed.has(preview.id)}
+                onClick={() => { install(preview); setPreview(null); }}
+                disabled={installed.has(preview.id) || installing === preview.id}
+                loading={installing === preview.id}
               >
                 {installed.has(preview.id) ? 'Already Installed' : <><Download className="w-3.5 h-3.5" /> Use Template</>}
               </Button>

@@ -158,8 +158,8 @@ export function TokenHealthPage() {
   }
 
   return (
-    <div className="p-6 max-w-[1400px]">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 max-w-[1400px]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold text-[#F0F2FF]">Connected Accounts & Health</h1>
           <p className="text-xs text-[#8B90A7] mt-0.5">Monitor token health, scopes, and circuit breakers</p>
@@ -170,7 +170,7 @@ export function TokenHealthPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
         <MetricCard label="Healthy Accounts" value={healthy} icon={<CheckCircle2 className="w-4 h-4" />} iconColor="text-green-400" />
         <MetricCard label="Expiring Soon" value={expiring} icon={<Clock className="w-4 h-4" />} iconColor="text-amber-400" subtitle="< 72h until expiry" />
         <MetricCard label="Broken" value={broken} icon={<AlertTriangle className="w-4 h-4" />} iconColor="text-red-400" subtitle="Flows paused" />
@@ -189,11 +189,11 @@ export function TokenHealthPage() {
       )}
 
       {/* Account cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <div className="col-span-3 py-12 text-center text-[#4B5068] text-sm">Loading accounts...</div>
+          <div className="col-span-full py-12 text-center text-[#4B5068] text-sm">Loading accounts...</div>
         ) : accounts.length === 0 ? (
-          <div className="col-span-3 py-12 text-center text-[#4B5068] text-sm">No connected accounts yet. Click "Add Account" to get started.</div>
+          <div className="col-span-full py-12 text-center text-[#4B5068] text-sm">No connected accounts yet. Click "Add Account" to get started.</div>
         ) : accounts.map(acc => (
           <div key={acc.id} className={`bg-[#1A1C24] rounded-xl border transition-all ${acc.health_status === 'BROKEN' ? 'border-red-500/30 bg-red-500/5' : acc.health_status === 'EXPIRING' ? 'border-amber-500/20' : 'border-[#2A2E42]'}`}>
             {/* Header */}

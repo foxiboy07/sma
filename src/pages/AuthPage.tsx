@@ -33,7 +33,7 @@ export function AuthPage() {
   return (
     <div className="min-h-screen bg-[#0A0B0F] flex">
       {/* Left: Branding */}
-      <div className="hidden lg:flex flex-1 flex-col justify-between p-12 bg-gradient-to-br from-[#0A0B0F] via-[#0d1117] to-[#111318] border-r border-[#1E2130]">
+      <div className="hidden lg:flex flex-1 flex-col justify-between p-8 xl:p-12 bg-gradient-to-br from-[#0A0B0F] via-[#0d1117] to-[#111318] border-r border-[#1E2130]">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/25">
             <Wifi className="w-5 h-5 text-white" />
@@ -42,24 +42,24 @@ export function AuthPage() {
         </div>
 
         <div>
-          <h1 className="text-4xl font-bold text-[#F0F2FF] leading-tight mb-4">
+          <h1 className="text-3xl xl:text-4xl font-bold text-[#F0F2FF] leading-tight mb-4">
             Automate every DM.<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
               Convert every intent.
             </span>
           </h1>
-          <p className="text-[#8B90A7] text-lg leading-relaxed mb-8">
+          <p className="text-[#8B90A7] text-base xl:text-lg leading-relaxed mb-8">
             The multi-channel DM automation platform that competes with ManyChat, Tidio, and Intercom — built for Instagram, Facebook, and TikTok.
           </p>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {[
               { stat: '50K', label: 'Webhooks/sec' },
               { stat: '95%', label: 'Attribution accuracy' },
               { stat: '60%', label: 'AI cost saved via cache' },
               { stat: '< 500ms', label: 'End-to-end latency' },
             ].map(item => (
-              <div key={item.label} className="bg-[#1A1C24] border border-[#2A2E42] rounded-xl p-4">
+              <div key={item.label} className="bg-[#1A1C24] border border-[#2A2E42] rounded-xl p-3 sm:p-4">
                 <p className="text-2xl font-bold text-blue-400 mb-1">{item.stat}</p>
                 <p className="text-xs text-[#8B90A7]">{item.label}</p>
               </div>
@@ -74,7 +74,7 @@ export function AuthPage() {
       </div>
 
       {/* Right: Auth form */}
-      <div className="flex-1 flex items-center justify-center p-8 max-w-lg mx-auto w-full">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 max-w-lg mx-auto w-full">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">

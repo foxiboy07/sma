@@ -113,8 +113,8 @@ export function DLQPage() {
   };
 
   return (
-    <div className="p-6 max-w-[1400px]">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 max-w-[1400px]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-xl font-bold text-[#F0F2FF]">Dead Letter Queue</h1>
@@ -154,7 +154,7 @@ export function DLQPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-3 mb-6 overflow-x-auto">
         <div className="flex gap-1 p-1 bg-[#111318] rounded-lg border border-[#1E2130]">
           {['all', 'INSTAGRAM', 'FACEBOOK', 'TIKTOK'].map(p => (
             <button key={p} onClick={() => setPlatformFilter(p)} className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${platformFilter === p ? 'bg-[#1A1C24] text-[#F0F2FF]' : 'text-[#8B90A7] hover:text-[#F0F2FF]'}`}>
@@ -180,12 +180,12 @@ export function DLQPage() {
       ) : filtered.length === 0 ? (
         <EmptyState icon={<CheckCircle2 className="w-8 h-8" />} title="All clear" description="No failed messages in the Dead Letter Queue." />
       ) : (
-        <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden">
-          <table className="w-full">
+        <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-x-auto">
+          <table className="w-full min-w-[700px]">
             <thead>
               <tr className="border-b border-[#1E2130]">
                 {['Time Failed', 'Platform', 'Contact', 'Flow', 'Error', 'Retries', 'Status', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-[#4B5068] uppercase tracking-wider">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-[#4B5068] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>

@@ -98,8 +98,8 @@ export function AuditLogPage() {
   }
 
   return (
-    <div className="p-6 max-w-[1400px]">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 max-w-[1400px]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold text-[#F0F2FF]">AI Audit Log</h1>
           <p className="text-xs text-[#8B90A7] mt-0.5">Full decision trace for every AI response — 1 year retention</p>
@@ -116,8 +116,8 @@ export function AuditLogPage() {
         </div>
       </div>
 
-      <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden">
-        <table className="w-full">
+      <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-x-auto">
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-[#1E2130]">
               {['Time', 'Contact', 'Intent', 'Model', 'Tokens', 'Cost', ''].map(h => (

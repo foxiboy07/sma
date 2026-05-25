@@ -115,7 +115,7 @@ export function GDPRPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="p-4 md:p-6 max-w-3xl space-y-6">
       <div>
         <h2 className="text-lg font-bold text-[#F0F2FF] mb-0.5">GDPR & Compliance</h2>
         <p className="text-xs text-[#8B90A7]">Manage data retention, consent logs, and subject access requests</p>
@@ -135,7 +135,7 @@ export function GDPRPage() {
               </Badge>
             </div>
             <p className="text-xs text-[#8B90A7] mb-3">Your account {complianceStats?.compliant !== false ? 'meets' : 'does not meet'} GDPR/CCPA requirements. Last audit: {complianceStats?.lastAudit ? format(new Date(complianceStats.lastAudit), 'MMM d, yyyy') : '—'}.</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
                 { label: 'Consent rate', value: complianceStats?.consentRate ?? '—', positive: complianceStats ? parseInt(complianceStats.consentRate) >= 90 : null },
                 { label: 'Opt-outs this month', value: String(complianceStats?.optOutsThisMonth ?? '—'), positive: null },
@@ -247,7 +247,7 @@ export function GDPRPage() {
       <Card>
         <h3 className="text-sm font-semibold text-[#F0F2FF] mb-1">Data Subject Requests (DSAR)</h3>
         <p className="text-xs text-[#8B90A7] mb-4">Export or erase all data for a specific contact (Art. 15, 17 GDPR)</p>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <Button variant="secondary" onClick={() => setExportModal(true)}>
             <Download className="w-4 h-4" /> Export Contact Data
           </Button>
@@ -268,8 +268,8 @@ export function GDPRPage() {
             <Download className="w-3.5 h-3.5" /> Export CSV
           </Button>
         </div>
-        <div className="overflow-hidden rounded-xl border border-[#1E2130]">
-          <table className="w-full">
+        <div className="overflow-x-auto rounded-xl border border-[#1E2130]">
+          <table className="w-full min-w-[500px]">
             <thead>
               <tr className="bg-[#0A0B0F] border-b border-[#1E2130]">
                 {['Time', 'Contact', 'Action', 'Platform', 'Method', ''].map(h => (
@@ -298,7 +298,7 @@ export function GDPRPage() {
                   {expandedLog === log.id && (
                     <tr className="border-b border-[#1E2130]">
                       <td colSpan={6} className="px-3 py-3 bg-[#0A0B0F]">
-                        <div className="grid grid-cols-3 gap-3 font-mono text-[11px]">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-[11px]">
                           <div><span className="text-[#4B5068]">Contact: </span><span className="text-[#F0F2FF]">{log.contact}</span></div>
                           <div><span className="text-[#4B5068]">Channel: </span><span className="text-[#F0F2FF]">{log.channel}</span></div>
                           <div><span className="text-[#4B5068]">IP: </span><span className="text-[#F0F2FF]">{log.ip}</span></div>
