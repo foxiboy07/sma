@@ -500,7 +500,8 @@ function FlowTable({
 
   return (
     <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden">
-      <table className="w-full">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[600px]">
         <thead>
           <tr className="border-b border-[#1E2130]">
             {['Name', 'Status', 'Trigger', 'Triggered', 'Conv%', 'Revenue', 'Last Edit', ''].map(h => (
@@ -539,6 +540,7 @@ function FlowTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

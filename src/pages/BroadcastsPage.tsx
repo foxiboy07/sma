@@ -836,7 +836,7 @@ export function BroadcastsPage() {
         ) : viewMode === 'list' ? (
           <div className="bg-[#111318] border border-[#2A2E42] rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[700px]">
                 <thead>
                   <tr className="border-b border-[#2A2E42]">
                     {[

@@ -241,7 +241,8 @@ export function ShortLinksPage() {
         />
       ) : (
         <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[500px]">
             <thead>
               <tr className="border-b border-[#1E2130]">
                 {['Short URL', 'Destination', 'Flow', 'Clicks', 'Created', ''].map(h => (
@@ -319,6 +320,7 @@ export function ShortLinksPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

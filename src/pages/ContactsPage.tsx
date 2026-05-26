@@ -329,7 +329,7 @@ export function ContactsPage() {
   const sentimentDot = (s: number) => s > 0.3 ? 'bg-green-400' : s > -0.3 ? 'bg-amber-400' : 'bg-red-400';
 
   return (
-    <div className="p-6 max-w-[1400px]">
+    <div className="p-4 md:p-6 max-w-[1400px]">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -391,7 +391,8 @@ export function ContactsPage() {
       {/* Table */}
       {!loading && (
         <div className="bg-[#111318] border border-[#1E2130] rounded-xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[700px]">
             <thead>
               <tr className="border-b border-[#1E2130]">
                 <th className="w-10 px-4 py-3">
@@ -450,6 +451,7 @@ export function ContactsPage() {
               ))}
             </tbody>
           </table>
+          </div>
 
           {filtered.length === 0 && (
             <EmptyState

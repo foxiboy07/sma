@@ -502,7 +502,7 @@ export function ContactDetailPage() {
 
   if (loading || !contact) {
     return (
-      <div className="p-6 max-w-[1400px]">
+      <div className="p-4 md:p-6 max-w-[1400px]">
         <p className="text-xs text-[#8B90A7]">Loading contact...</p>
       </div>
     );
@@ -1098,7 +1098,8 @@ export function ContactDetailPage() {
           {activeTab === 'flows' && (
             <Card>
               <h3 className="text-xs font-semibold text-[#4B5068] uppercase tracking-wider mb-3">Flow History</h3>
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[500px]">
                 <thead>
                   <tr className="border-b border-[#1E2130]">
                     {['Flow', 'Ran', 'Status', 'Converted'].map(h => (
@@ -1128,6 +1129,7 @@ export function ContactDetailPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </Card>
           )}
 
