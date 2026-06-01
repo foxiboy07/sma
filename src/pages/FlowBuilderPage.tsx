@@ -13,7 +13,11 @@ import {
   Code2, Webhook, ShoppingBag, Tag, Settings2, Variable,
   MousePointerClick, BookOpen, Layers, Share2, Link2, Hash,
   ToggleLeft, SlidersHorizontal, Send, CreditCard, Sparkles,
-  CircleSlash, FlaskConical, Loader2, CheckCircle, Info
+  CircleSlash, FlaskConical, Loader2, CheckCircle, Info,
+  Instagram, Facebook, Video, Phone, Users, Wrench,
+  Calendar, FileSpreadsheet, Bell, MessageCircle, AtSign,
+  UserPlus, QrCode, MousePointer, ShoppingCart, Search,
+  Star, Timer, Repeat, Shield, Database, Mail
 } from 'lucide-react';
 import { Button, Badge, Toggle, Modal } from '../components/ui';
 import { supabase } from '../lib/supabase';
@@ -27,20 +31,6 @@ import { flowEngineApi } from '../lib/api';
 type NodeCategory = 'TRIGGER' | 'MESSAGE' | 'LOGIC' | 'AI' | 'INTEGRATION';
 type FlowStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED';
 type SaveState = 'saved' | 'saving' | 'unsaved';
-
-interface PaletteItem {
-  type: string;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-}
-
-interface PaletteCategory {
-  id: NodeCategory;
-  label: string;
-  color: string;
-  items: PaletteItem[];
-}
 
 const CAT_COLORS: Record<NodeCategory, string> = {
   TRIGGER:     '#22C55E',
@@ -124,53 +114,351 @@ const NODE_LABELS: Record<string, string> = {
   OUTBOUND_WEBHOOK:     'Outbound Webhook',
 };
 
-const PALETTE_CATEGORIES: PaletteCategory[] = [
-  {
-    id: 'TRIGGER', label: 'Triggers', color: '#22C55E',
-    items: [
-      { type: 'COMMENT_TO_DM',        label: 'Comment Trigger',  description: 'Comment on post → DM', icon: NODE_ICONS.COMMENT_TO_DM },
-      { type: 'STORY_MENTION',         label: 'Story Mention',    description: 'Mentioned in story',   icon: NODE_ICONS.STORY_MENTION },
-      { type: 'STORY_REPLY',           label: 'Story Reply',      description: 'Replied to your story',icon: NODE_ICONS.STORY_REPLY },
-      { type: 'FOLLOW_TO_DM',          label: 'Follow Trigger',   description: 'New follower → DM',    icon: NODE_ICONS.FOLLOW_TO_DM },
-      { type: 'SHARE_TO_DM',           label: 'Share Trigger',    description: 'Shared post → DM',     icon: NODE_ICONS.SHARE_TO_DM },
-      { type: 'TIKTOK_COMMENT_TO_DM',  label: 'TikTok Comment',   description: 'TikTok comment → DM', icon: NODE_ICONS.TIKTOK_COMMENT_TO_DM },
-      { type: 'DEEPLINK_BIO_CLICK',    label: 'Bio Link Click',   description: 'Bio deeplink clicked', icon: NODE_ICONS.DEEPLINK_BIO_CLICK },
-      { type: 'MANUAL',                label: 'Manual Trigger',   description: 'Triggered manually',   icon: NODE_ICONS.MANUAL },
-    ],
-  },
-  {
-    id: 'MESSAGE', label: 'Messages', color: '#3B82F6',
-    items: [
-      { type: 'SEND_MESSAGE',        label: 'Send Message',      description: 'Text + quick replies',    icon: NODE_ICONS.SEND_MESSAGE },
-      { type: 'SEND_DM_CARD',        label: 'Send DM Card',      description: 'Rich card with buttons',  icon: NODE_ICONS.SEND_DM_CARD },
-      { type: 'TIKTOK_SHOP_PRODUCT', label: 'Send Product Card', description: 'TikTok Shop product',     icon: NODE_ICONS.TIKTOK_SHOP_PRODUCT },
-      { type: 'COLLECT_INPUT',       label: 'Collect User Input', description: 'Ask & store response',   icon: NODE_ICONS.COLLECT_INPUT },
-    ],
-  },
-  {
-    id: 'LOGIC', label: 'Logic', color: '#F59E0B',
-    items: [
-      { type: 'CONDITION',        label: 'Condition',          description: 'Branch on field/content',  icon: NODE_ICONS.CONDITION },
-      { type: 'SUPER_RANDOMIZER', label: 'A/B Split',          description: 'Traffic split by %',       icon: NODE_ICONS.SUPER_RANDOMIZER },
-      { type: 'SMART_DELAY',      label: 'Smart Delay',        description: 'Wait with 24h awareness',  icon: NODE_ICONS.SMART_DELAY },
-      { type: 'FRICTION_RECOVERY',label: 'Friction Recovery',  description: 'Retry on failure',         icon: NODE_ICONS.FRICTION_RECOVERY },
-    ],
-  },
-  {
-    id: 'AI', label: 'AI & Automation', color: '#14B8A6',
-    items: [
-      { type: 'AI_STEP',    label: 'AI Step',    description: 'Knowledge-base AI response', icon: NODE_ICONS.AI_STEP },
-      { type: 'CUSTOM_CODE', label: 'Custom Code', description: 'JavaScript execution block', icon: NODE_ICONS.CUSTOM_CODE },
-    ],
-  },
-  {
-    id: 'INTEGRATION', label: 'Integrations', color: '#22C55E',
-    items: [
-      { type: 'ACTION_BLOCK',      label: 'Action Block',      description: 'Tag, field, sequence', icon: NODE_ICONS.ACTION_BLOCK },
-      { type: 'OUTBOUND_WEBHOOK',  label: 'Outbound Webhook',  description: 'HTTP request',         icon: NODE_ICONS.OUTBOUND_WEBHOOK },
-    ],
-  },
+// ─────────────────────────────────────────────────────────────────────────────
+// NODE PICKER POPUP — ManyChat-style channel-based selector
+// ─────────────────────────────────────────────────────────────────────────────
+
+type PickerMode = 'trigger' | 'action';
+type PickerChannel = 'instagram' | 'facebook' | 'tiktok' | 'whatsapp' | 'contact' | 'system';
+
+interface PickerOption {
+  type: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  pro?: boolean;
+  color: string;
+}
+
+interface PickerChannelGroup {
+  id: PickerChannel;
+  label: string;
+  icon: React.ReactNode;
+  color: string;
+}
+
+const TRIGGER_CHANNELS: PickerChannelGroup[] = [
+  { id: 'instagram',  label: 'Instagram',  icon: <Instagram className="w-4 h-4" />, color: '#E1306C' },
+  { id: 'facebook',   label: 'Facebook',   icon: <Facebook className="w-4 h-4" />,  color: '#1877F2' },
+  { id: 'tiktok',     label: 'TikTok',     icon: <Video className="w-4 h-4" />,      color: '#00F2EA' },
+  { id: 'whatsapp',   label: 'WhatsApp',   icon: <Phone className="w-4 h-4" />,      color: '#25D366' },
+  { id: 'contact',    label: 'Contact',    icon: <Users className="w-4 h-4" />,      color: '#8B5CF6' },
+  { id: 'system',     label: 'System',     icon: <Wrench className="w-4 h-4" />,     color: '#F59E0B' },
 ];
+
+const ACTION_CHANNELS: PickerChannelGroup[] = [
+  { id: 'instagram',  label: 'Instagram',  icon: <Instagram className="w-4 h-4" />, color: '#E1306C' },
+  { id: 'facebook',   label: 'Facebook',   icon: <Facebook className="w-4 h-4" />, color: '#1877F2' },
+  { id: 'tiktok',     label: 'TikTok',     icon: <Video className="w-4 h-4" />,    color: '#00F2EA' },
+  { id: 'whatsapp',   label: 'WhatsApp',   icon: <Phone className="w-4 h-4" />,    color: '#25D366' },
+  { id: 'contact',    label: 'Contact',    icon: <Users className="w-4 h-4" />,    color: '#8B5CF6' },
+  { id: 'system',     label: 'System',     icon: <Wrench className="w-4 h-4" />,   color: '#F59E0B' },
+];
+
+const TRIGGER_OPTIONS: Record<PickerChannel, PickerOption[]> = {
+  instagram: [
+    { type: 'COMMENT_TO_DM',      label: 'Comment Reply',     description: 'Comment on post triggers DM', icon: <MessageCircle className="w-4 h-4" />,  color: '#E1306C' },
+    { type: 'STORY_MENTION',       label: 'Story Mention',    description: 'User mentions you in story',  icon: <AtSign className="w-4 h-4" />,         color: '#E1306C' },
+    { type: 'STORY_REPLY',         label: 'Story Reply',      description: 'User replies to your story',  icon: <Share2 className="w-4 h-4" />,         color: '#E1306C' },
+    { type: 'DEEPLINK_BIO_CLICK',  label: 'Bio Link Click',   description: 'Deeplink in bio clicked',     icon: <Link2 className="w-4 h-4" />,          color: '#E1306C' },
+  ],
+  facebook: [
+    { type: 'COMMENT_TO_DM',      label: 'Keyword',          description: 'Keyword in message triggers DM', icon: <Search className="w-4 h-4" />,     color: '#1877F2' },
+    { type: 'FOLLOW_TO_DM',        label: 'Post Comment',     description: 'Comment on page post',           icon: <MessageCircle className="w-4 h-4" />, color: '#1877F2' },
+    { type: 'MANUAL',              label: 'Lead Ad',          description: 'Lead ad form submission',        icon: <Database className="w-4 h-4" />,      color: '#1877F2' },
+    { type: 'MANUAL',              label: 'Checkbox Plugin',  description: 'Checkbox plugin opt-in',        icon: <ToggleLeft className="w-4 h-4" />,    color: '#1877F2' },
+  ],
+  tiktok: [
+    { type: 'TIKTOK_COMMENT_TO_DM', label: 'Comment DM',     description: 'TikTok comment triggers DM',   icon: <MessageCircle className="w-4 h-4" />,  color: '#00F2EA' },
+    { type: 'TIKTOK_COMMENT_TO_DM', label: 'Video Comment',  description: 'Comment on TikTok video',      icon: <Video className="w-4 h-4" />,           color: '#00F2EA' },
+  ],
+  whatsapp: [
+    { type: 'MANUAL',              label: 'Incoming Message', description: 'WhatsApp message received',   icon: <MessageCircle className="w-4 h-4" />, color: '#25D366' },
+    { type: 'MANUAL',              label: 'QR Scan',          description: 'WhatsApp QR code scanned',     icon: <QrCode className="w-4 h-4" />,        color: '#25D366' },
+    { type: 'MANUAL',              label: 'CTA Click',        description: 'Click-to-WhatsApp ad',        icon: <MousePointer className="w-4 h-4" />,  color: '#25D366' },
+  ],
+  contact: [
+    { type: 'MANUAL',              label: 'New Contact',      description: 'New contact created',          icon: <UserPlus className="w-4 h-4" />,       color: '#8B5CF6' },
+    { type: 'ACTION_BLOCK',        label: 'Tag Added',        description: 'Tag added to contact',         icon: <Tag className="w-4 h-4" />,            color: '#8B5CF6' },
+    { type: 'ACTION_BLOCK',        label: 'Field Updated',    description: 'Contact field changed',        icon: <Variable className="w-4 h-4" />,       color: '#8B5CF6' },
+    { type: 'ACTION_BLOCK',        label: 'Segment Entry',    description: 'Contact enters segment',       icon: <Layers className="w-4 h-4" />,         color: '#8B5CF6' },
+  ],
+  system: [
+    { type: 'MANUAL',              label: 'Scheduled Time',   description: 'Run flow on schedule',         icon: <Calendar className="w-4 h-4" />,       color: '#F59E0B' },
+    { type: 'OUTBOUND_WEBHOOK',    label: 'Webhook',          description: 'Incoming webhook trigger',     icon: <Webhook className="w-4 h-4" />,        color: '#F59E0B', pro: true },
+    { type: 'OUTBOUND_WEBHOOK',    label: 'Shopify Event',    description: 'Shopify order/event trigger',  icon: <ShoppingCart className="w-4 h-4" />,   color: '#F59E0B', pro: true },
+    { type: 'OUTBOUND_WEBHOOK',    label: 'API Call',         description: 'External API trigger',         icon: <Code2 className="w-4 h-4" />,          color: '#F59E0B', pro: true },
+  ],
+};
+
+const ACTION_OPTIONS: Record<PickerChannel, PickerOption[]> = {
+  instagram: [
+    { type: 'SEND_MESSAGE',   label: 'Send Message',    description: 'Text + quick replies',      icon: <Send className="w-4 h-4" />,           color: '#E1306C' },
+    { type: 'SEND_DM_CARD',   label: 'Send DM Card',    description: 'Rich card with buttons',    icon: <CreditCard className="w-4 h-4" />,     color: '#E1306C' },
+    { type: 'COLLECT_INPUT',  label: 'Collect Input',   description: 'Ask question, store reply', icon: <ToggleLeft className="w-4 h-4" />,     color: '#E1306C' },
+  ],
+  facebook: [
+    { type: 'SEND_MESSAGE',   label: 'Send Message',    description: 'Text + quick replies',      icon: <Send className="w-4 h-4" />,           color: '#1877F2' },
+    { type: 'SEND_DM_CARD',   label: 'Send DM Card',    description: 'Rich card with buttons',    icon: <CreditCard className="w-4 h-4" />,     color: '#1877F2' },
+    { type: 'COLLECT_INPUT',  label: 'Collect Input',   description: 'Ask question, store reply', icon: <ToggleLeft className="w-4 h-4" />,     color: '#1877F2' },
+  ],
+  tiktok: [
+    { type: 'SEND_MESSAGE',        label: 'Send Message',     description: 'Text + quick replies',   icon: <Send className="w-4 h-4" />,             color: '#00F2EA' },
+    { type: 'TIKTOK_SHOP_PRODUCT', label: 'Product Card',     description: 'TikTok Shop product',    icon: <ShoppingBag className="w-4 h-4" />,      color: '#00F2EA' },
+  ],
+  whatsapp: [
+    { type: 'SEND_MESSAGE',   label: 'Send Message',    description: 'WhatsApp text message',     icon: <Send className="w-4 h-4" />,          color: '#25D366' },
+    { type: 'SEND_DM_CARD',   label: 'Send Template',   description: 'WhatsApp template message', icon: <FileSpreadsheet className="w-4 h-4" />,color: '#25D366' },
+  ],
+  contact: [
+    { type: 'ACTION_BLOCK',  label: 'Add Tag',          description: 'Tag the contact',            icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6' },
+    { type: 'ACTION_BLOCK',  label: 'Set Field',        description: 'Set contact field value',    icon: <Variable className="w-4 h-4" />,      color: '#8B5CF6' },
+    { type: 'ACTION_BLOCK',  label: 'Add to Sequence',  description: 'Enroll in sequence',         icon: <Repeat className="w-4 h-4" />,        color: '#8B5CF6' },
+    { type: 'ACTION_BLOCK',  label: 'Remove Tag',       description: 'Remove a tag',               icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6' },
+  ],
+  system: [
+    { type: 'OUTBOUND_WEBHOOK', label: 'Webhook',       description: 'Send HTTP request',          icon: <Webhook className="w-4 h-4" />,       color: '#F59E0B' },
+    { type: 'OUTBOUND_WEBHOOK', label: 'Google Sheets',  description: 'Add row to spreadsheet',    icon: <FileSpreadsheet className="w-4 h-4" />,color: '#F59E0B' },
+    { type: 'SMART_DELAY',      label: 'Delay',          description: 'Wait before next step',      icon: <Timer className="w-4 h-4" />,         color: '#F59E0B' },
+    { type: 'ACTION_BLOCK',    label: 'Notify Team',    description: 'Alert team via email/Slack', icon: <Bell className="w-4 h-4" />,          color: '#F59E0B', pro: true },
+  ],
+};
+
+interface NodePickerPopupProps {
+  mode: PickerMode;
+  position?: { x: number; y: number };
+  onClose: () => void;
+  onSelect: (type: string) => void;
+}
+
+function NodePickerPopup({ mode, position, onClose, onSelect }: NodePickerPopupProps) {
+  const channels = mode === 'trigger' ? TRIGGER_CHANNELS : ACTION_CHANNELS;
+  const options = mode === 'trigger' ? TRIGGER_OPTIONS : ACTION_OPTIONS;
+  const [activeChannel, setActiveChannel] = useState<PickerChannel>(channels[0].id);
+  const [search, setSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const channelOptions = options[activeChannel] || [];
+  const filtered = search
+    ? channelOptions.filter(o =>
+        o.label.toLowerCase().includes(search.toLowerCase()) ||
+        o.description.toLowerCase().includes(search.toLowerCase())
+      )
+    : channelOptions;
+
+  // Search across all channels
+  const allOptions = search
+    ? (Object.values(options).flat().filter(o =>
+        o.label.toLowerCase().includes(search.toLowerCase()) ||
+        o.description.toLowerCase().includes(search.toLowerCase())
+      ))
+    : filtered;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative bg-[#111318] border border-[#2A2E42] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1E2130] flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${mode === 'trigger' ? 'bg-green-500/15' : 'bg-blue-500/15'}`}>
+              {mode === 'trigger'
+                ? <Zap className="w-4 h-4 text-green-400" />
+                : <Send className="w-4 h-4 text-blue-400" />
+              }
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-[#F0F2FF]">
+                Choose a {mode === 'trigger' ? 'Trigger' : 'Action'}
+              </h2>
+              <p className="text-[10px] text-[#4B5068] mt-0.5">
+                {mode === 'trigger' ? 'What starts this flow?' : 'What should happen next?'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#4B5068] hover:text-[#F0F2FF] hover:bg-[#1A1C24] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="px-5 py-3 border-b border-[#1E2130] flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4B5068]" />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={`Search ${mode === 'trigger' ? 'triggers' : 'actions'}...`}
+              className="h-9 w-full rounded-lg bg-[#0A0B0F] border border-[#2A2E42] text-sm text-[#F0F2FF] placeholder:text-[#4B5068] pl-9 pr-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Body: left channels + right options */}
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          {/* Left: Channel sidebar */}
+          {!search && (
+            <div className="w-[140px] flex-shrink-0 border-r border-[#1E2130] overflow-y-auto py-2 px-2">
+              {channels.map(ch => {
+                const isActive = activeChannel === ch.id;
+                const count = (options[ch.id] || []).length;
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => setActiveChannel(ch.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all mb-0.5 ${
+                      isActive
+                        ? 'bg-[#1A1C24] text-[#F0F2FF]'
+                        : 'text-[#8B90A7] hover:bg-[#1A1C24]/50 hover:text-[#F0F2FF]'
+                    }`}
+                  >
+                    <span style={{ color: isActive ? ch.color : undefined }} className="flex-shrink-0">
+                      {ch.icon}
+                    </span>
+                    <span className="text-xs font-medium flex-1 truncate">{ch.label}</span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0 rounded-full ${
+                      isActive ? 'bg-[#2A2E42] text-[#F0F2FF]' : 'text-[#4B5068]'
+                    }`}>{count}</span>
+                  </button>
+                );
+              })}
+
+              {/* Divider + Logic/AI section */}
+              <div className="border-t border-[#1E2130] my-2" />
+              <p className="text-[9px] font-black text-[#4B5068] uppercase tracking-[0.15em] px-3 mb-1">Logic & AI</p>
+              {(mode === 'action' ? [
+                { id: 'logic' as const, label: 'Logic', icon: <GitBranch className="w-4 h-4" />, color: '#F59E0B', types: ['CONDITION', 'SUPER_RANDOMIZER', 'SMART_DELAY', 'FRICTION_RECOVERY'] },
+                { id: 'ai' as const, label: 'AI & Code', icon: <Brain className="w-4 h-4" />, color: '#14B8A6', types: ['AI_STEP', 'CUSTOM_CODE'] },
+              ] : []).map(group => (
+                <button
+                  key={group.id}
+                  onClick={() => setActiveChannel(group.id as PickerChannel)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all mb-0.5 ${
+                    activeChannel === group.id
+                      ? 'bg-[#1A1C24] text-[#F0F2FF]'
+                      : 'text-[#8B90A7] hover:bg-[#1A1C24]/50 hover:text-[#F0F2FF]'
+                  }`}
+                >
+                  <span style={{ color: activeChannel === group.id ? group.color : undefined }} className="flex-shrink-0">
+                    {group.icon}
+                  </span>
+                  <span className="text-xs font-medium flex-1 truncate">{group.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Right: Options grid */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {search ? (
+              /* Global search results */
+              allOptions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Search className="w-8 h-8 text-[#4B5068] mb-3" />
+                  <p className="text-sm text-[#8B90A7]">No results for "{search}"</p>
+                  <p className="text-xs text-[#4B5068] mt-1">Try a different search term</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {allOptions.map((opt, i) => (
+                    <OptionCard key={`${opt.type}-${i}`} option={opt} onClick={() => onSelect(opt.type)} />
+                  ))}
+                </div>
+              )
+            ) : activeChannel === 'logic' ? (
+              /* Logic nodes */
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { type: 'CONDITION',        label: 'Condition',         description: 'Branch on field/content', icon: <GitBranch className="w-5 h-5" />,   color: '#F59E0B' },
+                  { type: 'SUPER_RANDOMIZER', label: 'A/B Split',         description: 'Traffic split by %',      icon: <SlidersHorizontal className="w-5 h-5" />, color: '#F59E0B' },
+                  { type: 'SMART_DELAY',      label: 'Smart Delay',       description: 'Wait with 24h awareness', icon: <Clock className="w-5 h-5" />,       color: '#F59E0B' },
+                  { type: 'FRICTION_RECOVERY',label: 'Friction Recovery', description: 'Retry on failure',        icon: <RefreshCw className="w-5 h-5" />,   color: '#F59E0B' },
+                ].map(opt => (
+                  <OptionCard key={opt.type} option={opt} onClick={() => onSelect(opt.type)} />
+                ))}
+              </div>
+            ) : activeChannel === 'ai' ? (
+              /* AI nodes */
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { type: 'AI_STEP',     label: 'AI Step',     description: 'Knowledge-base AI response', icon: <Brain className="w-5 h-5" />,  color: '#14B8A6' },
+                  { type: 'CUSTOM_CODE', label: 'Custom Code', description: 'JavaScript execution block', icon: <Code2 className="w-5 h-5" />,  color: '#14B8A6' },
+                ].map(opt => (
+                  <OptionCard key={opt.type} option={opt} onClick={() => onSelect(opt.type)} />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-10 h-10 rounded-xl bg-[#1A1C24] border border-[#2A2E42] flex items-center justify-center mb-3">
+                  {channels.find(c => c.id === activeChannel)?.icon}
+                </div>
+                <p className="text-sm text-[#8B90A7]">No {mode === 'trigger' ? 'triggers' : 'actions'} available</p>
+                <p className="text-xs text-[#4B5068] mt-1">Try a different channel</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                {filtered.map((opt, i) => (
+                  <OptionCard key={`${opt.type}-${i}`} option={opt} onClick={() => onSelect(opt.type)} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OptionCard({ option, onClick }: { option: PickerOption | { type: string; label: string; description: string; icon: React.ReactNode; color: string; pro?: boolean }; onClick: () => void }) {
+  const { type, label, description, icon, color, pro } = option;
+  return (
+    <button
+      onClick={onClick}
+      className="group flex items-start gap-3 p-3 rounded-xl bg-[#0A0B0F] border border-[#2A2E42] hover:border-[#3A3E52] hover:bg-[#1A1C24] transition-all text-left w-full"
+    >
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform"
+        style={{ backgroundColor: `${color}15`, color }}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-semibold text-[#F0F2FF] group-hover:text-white truncate transition-colors">
+            {label}
+          </p>
+          {pro && (
+            <span className="flex-shrink-0 px-1.5 py-0 rounded text-[8px] font-black tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/20">
+              PRO
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-[#4B5068] group-hover:text-[#8B90A7] truncate mt-0.5 leading-tight transition-colors">
+          {description}
+        </p>
+      </div>
+    </button>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CUSTOM NODE COMPONENT
@@ -184,6 +472,8 @@ function FlowNode({ data, selected }: { data: Record<string, unknown>; selected:
   const isCondition = type === 'CONDITION';
   const isABSplit = type === 'SUPER_RANDOMIZER';
   const paths: { label: string; pct: number }[] = (data.config as any)?.paths || [];
+  const isUnconfigured = !data.preview && Object.keys((data.config as Record<string, unknown>) || {}).length === 0;
+  const onPlusClick = data.onPlusClick as ((nodeId: string) => void) | undefined;
 
   return (
     <div
@@ -223,12 +513,17 @@ function FlowNode({ data, selected }: { data: Record<string, unknown>; selected:
         </p>
       </div>
 
-      {/* Body */}
+      {/* Body — unconfigured nodes show click-to-configure CTA */}
       <div className="pl-4 pr-3 py-2.5">
         {data.preview ? (
           <p className="text-xs text-[#8B90A7] line-clamp-2 leading-relaxed">{data.preview as string}</p>
         ) : (
-          <p className="text-xs text-[#4B5068] italic">Click to configure</p>
+          <div className="flex items-center gap-2 py-1">
+            <div className="w-5 h-5 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+              <Plus className="w-3 h-3 text-blue-400" />
+            </div>
+            <p className="text-xs text-blue-400 font-medium">Click to configure</p>
+          </div>
         )}
       </div>
 
@@ -299,6 +594,60 @@ function FlowNode({ data, selected }: { data: Record<string, unknown>; selected:
           <span className="text-[9px] text-green-500 font-semibold">YES</span>
           <span className="text-[9px] text-[#4B5068]">DEFAULT</span>
           <span className="text-[9px] text-red-500 font-semibold">NO</span>
+        </div>
+      )}
+
+      {/* + Add next step button */}
+      {isCondition ? (
+        <div className="flex justify-between px-2 pb-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); if (onPlusClick) onPlusClick((data as any).id || ''); }}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-green-400 hover:text-white hover:bg-green-500 transition-all border border-green-500/20"
+            title="Add YES step"
+          >
+            <Plus className="w-2.5 h-2.5" /> Yes
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); if (onPlusClick) onPlusClick((data as any).id || ''); }}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-[#8B90A7] hover:text-white hover:bg-blue-500 transition-all border border-[#2A2E42]"
+            title="Add DEFAULT step"
+          >
+            <Plus className="w-2.5 h-2.5" /> Default
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); if (onPlusClick) onPlusClick((data as any).id || ''); }}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-red-400 hover:text-white hover:bg-red-500 transition-all border border-red-500/20"
+            title="Add NO step"
+          >
+            <Plus className="w-2.5 h-2.5" /> No
+          </button>
+        </div>
+      ) : isABSplit ? (
+        <div className="flex justify-center gap-2 px-2 pb-2">
+          {paths.map((p, i) => (
+            <button
+              key={i}
+              onClick={(e) => { e.stopPropagation(); if (onPlusClick) onPlusClick((data as any).id || ''); }}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-amber-400 hover:text-white hover:bg-amber-500 transition-all border border-amber-500/20"
+              title={`Add step for ${p.label}`}
+            >
+              <Plus className="w-2.5 h-2.5" /> {p.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex justify-center pb-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onPlusClick) onPlusClick((data as any).id || '');
+            }}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium text-blue-400 hover:text-white hover:bg-blue-500 transition-all border border-blue-500/20 hover:border-blue-500"
+            title="Add next step"
+          >
+            <Plus className="w-3 h-3" />
+            Add step
+          </button>
         </div>
       )}
     </div>
@@ -1569,9 +1918,9 @@ export function FlowBuilderPage() {
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<NodeCategory>>(new Set());
-
-  const [showMobilePalette, setShowMobilePalette] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<PickerMode>('trigger');
+  const [pickerSourceNodeId, setPickerSourceNodeId] = useState<string | null>(null);
 
   const [showValidation, setShowValidation] = useState(false);
   const [showTest, setShowTest] = useState(false);
@@ -1612,6 +1961,7 @@ export function FlowBuilderPage() {
             preview: buildPreview(n.node_type, n.config || {}),
             config: n.config || {},
             dbId: n.id,
+            onPlusClick: (nodeId: string) => openPicker('action', nodeId),
           },
         }));
         setNodes(rfNodes);
@@ -1697,22 +2047,78 @@ export function FlowBuilderPage() {
   // ── Add node from palette ──
   function addNode(type: string) {
     const rfId = nextNodeId();
+    const isTrigger = NODE_CATEGORY[type] === 'TRIGGER';
+
+    // If adding from a + connector, position relative to source node
+    let posX = 250 + Math.random() * 180;
+    let posY = 120 + (nodes.length * 120) % 600;
+
+    if (pickerSourceNodeId) {
+      const srcNode = nodes.find(n => n.id === pickerSourceNodeId);
+      if (srcNode) {
+        posX = srcNode.position.x + Math.random() * 40 - 20;
+        posY = srcNode.position.y + 200;
+      }
+    } else if (nodes.length === 0) {
+      posX = 300;
+      posY = 80;
+    }
+
     setNodes(prev => [...prev, {
       id: rfId,
       type: 'flowNode',
-      position: {
-        x: 250 + Math.random() * 180,
-        y: 120 + (prev.length * 120) % 600,
-      },
+      position: { x: posX, y: posY },
       data: {
         nodeType: type,
         label: NODE_LABELS[type] || type,
         preview: '',
         config: {},
+        onPlusClick: (nodeId: string) => openPicker('action', nodeId),
       },
     }]);
+
+    // Auto-connect if adding from a + connector
+    if (pickerSourceNodeId) {
+      const srcNode = nodes.find(n => n.id === pickerSourceNodeId);
+      if (srcNode) {
+        const srcType = srcNode.data?.nodeType as string;
+        const isSrcCondition = srcType === 'CONDITION';
+        const isSrcABSplit = srcType === 'SUPER_RANDOMIZER';
+        let sourceHandle: string | null = null;
+        let label: string | undefined;
+        let stroke = '#2A2E42';
+
+        if (isSrcCondition) {
+          sourceHandle = 'default';
+          label = undefined;
+        } else if (isSrcABSplit) {
+          const paths = (srcNode.data?.config as any)?.paths || [];
+          sourceHandle = paths.length > 0 ? `path-0` : null;
+        }
+
+        setEdges(eds => [...eds, {
+          id: `e-${pickerSourceNodeId}-${rfId}`,
+          source: pickerSourceNodeId,
+          target: rfId,
+          sourceHandle,
+          type: 'smoothstep',
+          label,
+          markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+          style: { stroke, strokeWidth: 1.5 },
+        }]);
+      }
+    }
+
     setSaveState('unsaved');
-    setShowMobilePalette(false); // close palette on mobile after adding a node
+    setShowMobilePalette(false);
+    setShowPicker(false);
+    setPickerSourceNodeId(null);
+  }
+
+  function openPicker(mode: PickerMode, sourceNodeId?: string | null) {
+    setPickerMode(mode);
+    setPickerSourceNodeId(sourceNodeId || null);
+    setShowPicker(true);
   }
 
   // ── Update node data after panel save ──
@@ -1914,21 +2320,13 @@ export function FlowBuilderPage() {
     }
   }
 
-  function toggleCategory(cat: NodeCategory) {
-    setCollapsedCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat); else next.add(cat);
-      return next;
-    });
-  }
-
   // ── Validation ──
   const hasTrigger = nodes.some(n => NODE_CATEGORY[n.data?.nodeType as string] === 'TRIGGER');
   const hasAction  = nodes.some(n => NODE_CATEGORY[n.data?.nodeType as string] !== 'TRIGGER' && n.data?.nodeType);
   const validationErrors = [
     ...(!hasTrigger ? [{ msg: 'Flow needs at least one Trigger node' }] : []),
     ...(!hasAction && nodes.length > 0 ? [{ msg: 'Flow needs at least one action node after the trigger' }] : []),
-    ...(nodes.length === 0 ? [{ msg: 'Canvas is empty — drag nodes from the left panel' }] : []),
+    ...(nodes.length === 0 ? [{ msg: 'Canvas is empty — click "Add a trigger" to get started' }] : []),
   ];
   const validationWarnings = [
     ...(nodes.some(n => n.data?.nodeType === 'SMART_DELAY') ? [{ msg: 'Check Smart Delay nodes — delays over 24h may require Message Tag' }] : []),
@@ -2104,102 +2502,24 @@ export function FlowBuilderPage() {
       {/* ─── MAIN AREA ─── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ─── NODE PALETTE ─── */}
-        <div className={`${showMobilePalette ? 'flex' : 'hidden'} md:flex w-[200px] flex-shrink-0 bg-[#111318] border-r border-[#1E2130] overflow-y-auto flex-col`}>
-          <div className="px-3 pt-3 pb-2 flex-shrink-0 flex items-center justify-between">
-            <p className="text-[9px] font-black text-[#4B5068] uppercase tracking-[0.15em]">Nodes</p>
-            <button
-              onClick={() => setShowMobilePalette(false)}
-              className="md:hidden w-6 h-6 flex items-center justify-center rounded text-[#4B5068] hover:text-[#F0F2FF]"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="flex-1 pb-4">
-            {PALETTE_CATEGORIES.map(cat => {
-              const collapsed = collapsedCategories.has(cat.id);
-              return (
-                <div key={cat.id} className="mb-1">
-                  {/* Category header */}
-                  <button
-                    onClick={() => toggleCategory(cat.id)}
-                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#1A1C24] transition-colors group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: cat.color }}
-                      />
-                      <span className="text-[10px] font-bold text-[#8B90A7] uppercase tracking-wider group-hover:text-[#F0F2FF] transition-colors">
-                        {cat.label}
-                      </span>
-                    </div>
-                    {collapsed
-                      ? <ChevronRight className="w-3 h-3 text-[#4B5068]" />
-                      : <ChevronDown  className="w-3 h-3 text-[#4B5068]" />
-                    }
-                  </button>
-
-                  {/* Items */}
-                  {!collapsed && (
-                    <div className="pb-1">
-                      {cat.items.map(item => (
-                        <button
-                          key={item.type}
-                          onClick={() => addNode(item.type)}
-                          className="w-full flex items-start gap-2.5 px-3 py-2 hover:bg-[#1A1C24] transition-colors group text-left"
-                          draggable
-                          onDragStart={e => {
-                            e.dataTransfer.setData('nodeType', item.type);
-                          }}
-                        >
-                          <span
-                            className="mt-0.5 flex-shrink-0 opacity-70 group-hover:opacity-100"
-                            style={{ color: cat.color }}
-                          >
-                            {item.icon}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-xs text-[#8B90A7] group-hover:text-[#F0F2FF] font-medium truncate leading-tight transition-colors">
-                              {item.label}
-                            </p>
-                            <p className="text-[9px] text-[#4B5068] truncate leading-tight mt-0.5">
-                              {item.description}
-                            </p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Node count */}
-          <div className="flex-shrink-0 px-3 py-2 border-t border-[#1E2130]">
-            <p className="text-[9px] text-[#4B5068]">{nodes.length} node{nodes.length !== 1 ? 's' : ''} · {edges.length} edge{edges.length !== 1 ? 's' : ''}</p>
-          </div>
-        </div>
-
-        {/* ─── CANVAS ─── */}
-        <div
-          className="flex-1 relative min-w-0"
-          onDragOver={e => e.preventDefault()}
-          onDrop={e => {
-            e.preventDefault();
-            const type = e.dataTransfer.getData('nodeType');
-            if (type) addNode(type);
-          }}
-        >
+        {/* ─── CANVAS (full width — no left sidebar) ─── */}
+        <div className="flex-1 relative min-w-0">
           <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={changes => { onNodesChange(changes); setSaveState('unsaved'); }}
             onEdgesChange={changes => { onEdgesChange(changes); setSaveState('unsaved'); }}
             onConnect={onConnect}
-            onNodeClick={(_, node) => setSelectedNode(node)}
+            onNodeClick={(_, node) => {
+              // If node is unconfigured, open picker instead of properties
+              const isUnconfigured = !node.data?.preview && Object.keys((node.data?.config as Record<string, unknown>) || {}).length === 0;
+              if (isUnconfigured) {
+                const cat = NODE_CATEGORY[node.data?.nodeType as string];
+                openPicker(cat === 'TRIGGER' ? 'trigger' : 'action', node.id);
+              } else {
+                setSelectedNode(node);
+              }
+            }}
             onPaneClick={() => setSelectedNode(null)}
             nodeTypes={nodeTypes}
             fitView
@@ -2232,31 +2552,58 @@ export function FlowBuilderPage() {
               style={{ bottom: 16, right: selectedNode ? 336 : 16, background: '#111318', border: '1px solid #1E2130', borderRadius: 12 }}
             />
 
-            {/* Empty state */}
+            {/* Empty state — clickable to open trigger picker */}
             {nodes.length === 0 && !loading && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-[#1A1C24] border border-[#2A2E42] flex items-center justify-center mx-auto mb-4">
-                    <Sparkles className="w-7 h-7 text-[#4B5068]" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <button
+                  onClick={() => openPicker('trigger')}
+                  className="group text-center"
+                >
+                  <div className="w-20 h-20 rounded-2xl bg-green-500/10 border-2 border-dashed border-green-500/30 group-hover:border-green-500/60 group-hover:bg-green-500/15 flex items-center justify-center mx-auto mb-4 transition-all">
+                    <Zap className="w-8 h-8 text-green-400 group-hover:scale-110 transition-transform" />
                   </div>
-                  <p className="text-sm font-semibold text-[#8B90A7] mb-1">Canvas is empty</p>
-                  <p className="text-xs text-[#4B5068]">Click a node from the left panel to get started</p>
-                </div>
+                  <p className="text-sm font-bold text-[#8B90A7] group-hover:text-[#F0F2FF] mb-1 transition-colors">Add a trigger to start</p>
+                  <p className="text-xs text-[#4B5068]">Click here to choose what starts this flow</p>
+                </button>
               </div>
             )}
           </ReactFlow>
-        </div>
 
-        {/* ─── MOBILE: floating "+" button to open palette ─── */}
-        {!showMobilePalette && !selectedNode && (
-          <button
-            onClick={() => setShowMobilePalette(true)}
-            className="md:hidden absolute bottom-20 left-4 z-20 w-12 h-12 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-lg flex items-center justify-center transition-colors"
-            title="Add node"
-          >
-            <Plus className="w-6 h-6" />
-          </button>
-        )}
+          {/* Floating "+" button — always visible, opens action picker */}
+          {nodes.length > 0 && !selectedNode && !showPicker && (
+            <button
+              onClick={() => {
+                // If no trigger exists, open trigger picker; otherwise action
+                const hasTrigger = nodes.some(n => NODE_CATEGORY[n.data?.nodeType as string] === 'TRIGGER');
+                openPicker(hasTrigger ? 'action' : 'trigger');
+              }}
+              className="absolute bottom-6 right-6 z-20 w-11 h-11 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25 flex items-center justify-center transition-all hover:scale-105"
+              title="Add step"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          )}
+
+          {/* Quick-add buttons in toolbar area */}
+          {nodes.length > 0 && !selectedNode && !showPicker && (
+            <div className="absolute top-3 left-3 z-20 flex gap-1.5">
+              <button
+                onClick={() => openPicker('trigger')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#111318] border border-[#2A2E42] hover:border-green-500/30 text-[10px] font-bold text-[#8B90A7] hover:text-green-400 transition-all shadow-lg"
+              >
+                <Zap className="w-3 h-3" />
+                Add Trigger
+              </button>
+              <button
+                onClick={() => openPicker('action')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#111318] border border-[#2A2E42] hover:border-blue-500/30 text-[10px] font-bold text-[#8B90A7] hover:text-blue-400 transition-all shadow-lg"
+              >
+                <Plus className="w-3 h-3" />
+                Add Step
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* ─── PROPERTIES PANEL ─── */}
         {selectedNode && (
@@ -2268,6 +2615,15 @@ export function FlowBuilderPage() {
           />
         )}
       </div>
+
+      {/* ─── NODE PICKER POPUP ─── */}
+      {showPicker && (
+        <NodePickerPopup
+          mode={pickerMode}
+          onClose={() => { setShowPicker(false); setPickerSourceNodeId(null); }}
+          onSelect={(type) => addNode(type)}
+        />
+      )}
 
       {/* ─── TEST MODAL ─── */}
       <Modal
