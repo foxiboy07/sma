@@ -2766,23 +2766,23 @@ function FlowBuilderContent() {
               maskColor="rgba(10,11,15,0.8)"
               style={{ bottom: 16, right: selectedNode ? 336 : 16, background: '#111318', border: '1px solid #1E2130', borderRadius: 12 }}
             />
-
-            {/* Empty state — clickable to open trigger picker */}
-            {nodes.length === 0 && !loading && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button
-                  onClick={() => openPicker('trigger')}
-                  className="group text-center"
-                >
-                  <div className="w-20 h-20 rounded-2xl bg-green-500/10 border-2 border-dashed border-green-500/30 group-hover:border-green-500/60 group-hover:bg-green-500/15 flex items-center justify-center mx-auto mb-4 transition-all">
-                    <Zap className="w-8 h-8 text-green-400 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <p className="text-sm font-bold text-[#8B90A7] group-hover:text-[#F0F2FF] mb-1 transition-colors">Add a trigger to start</p>
-                  <p className="text-xs text-[#4B5068]">Click here to choose what starts this flow</p>
-                </button>
-              </div>
-            )}
           </ReactFlow>
+
+          {/* Empty state — clickable to open trigger picker (outside ReactFlow) */}
+          {nodes.length === 0 && !loading && (
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+              <button
+                onClick={() => openPicker('trigger')}
+                className="group text-center pointer-events-auto"
+              >
+                <div className="w-20 h-20 rounded-2xl bg-green-500/10 border-2 border-dashed border-green-500/30 group-hover:border-green-500/60 group-hover:bg-green-500/15 flex items-center justify-center mx-auto mb-4 transition-all">
+                  <Zap className="w-8 h-8 text-green-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <p className="text-sm font-bold text-[#8B90A7] group-hover:text-[#F0F2FF] mb-1 transition-colors">Add a trigger to start</p>
+                <p className="text-xs text-[#4B5068]">Click here to choose what starts this flow</p>
+              </button>
+            </div>
+          )}
 
           {/* Floating "+" button — always visible, opens action picker */}
           {nodes.length > 0 && !selectedNode && !showPicker && (
