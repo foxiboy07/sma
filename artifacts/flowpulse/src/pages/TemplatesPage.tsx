@@ -5,7 +5,7 @@ import {
   CheckCircle2, TrendingUp, Users, Lock
 } from 'lucide-react';
 import { Button, Card, Badge, Modal } from '../components/ui';
-import { supabase } from '../lib/supabase';
+import { flowsApi } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { TriggerType } from '../types';
@@ -285,45 +285,29 @@ export function TemplatesPage() {
     setInstalling(template.id);
     setError(null);
     try {
-      // 1. Insert the flow
-      const { data: flow, error: flowErr } = await supabase
-        .from('flows')
-        .insert({
-          tenant_id: tenant.id,
-          brand_id: brand.id,
-          name: template.name,
-          status: 'DRAFT',
-          trigger_type: template.trigger_type,
-          trigger_config: {},
-          ghost_traffic_pct: 0,
-          triggered_count: 0,
-          conversion_count: 0,
-          revenue_attributed: 0,
-        })
-        .select()
-        .single();
+      // 1. Create the flow via API
+      const flow = await flowsApi.create(brand.id, {
+        name: template.name,
+        triggerType: template.trigger_type,
+      });
 
-      if (flowErr || !flow) throw new Error(flowErr?.message || 'Failed to create flow');
+      if (!flow?.id) throw new Error('Failed to create flow');
 
-      // 2. Insert flow_nodes from template preview
+      // 2. Save template nodes if any
       if (template.preview.length > 0) {
-        const nodes = template.preview.map((node, idx) => ({
-          flow_id: flow.id,
-          tenant_id: tenant.id,
-          node_type: node.type,
+        const nodes = template.preview.map((node: any, idx: number) => ({
+          nodeType: node.type,
           label: node.label,
-          position_x: 300,
-          position_y: idx * 120,
+          positionX: 300,
+          positionY: idx * 120,
           config: {},
         }));
-        const { error: nodesErr } = await supabase
-          .from('flow_nodes')
-          .insert(nodes);
-        if (nodesErr) console.warn('Could not insert nodes:', nodesErr.message);
+        await flowsApi.saveNodes(flow.id, nodes, []).catch((e: any) =>
+          console.warn('Could not save template nodes:', e?.message)
+        );
       }
 
       setInstalled(prev => new Set([...prev, template.id]));
-      // Navigate to the builder
       navigate(`/flows/${flow.id}/builder`);
     } catch (err: any) {
       setError(err?.message || 'Failed to install template. Please try again.');

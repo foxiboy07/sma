@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Grid3X3, Table, MoreVertical, Play, Pause, Copy, Archive, Zap, Clock, Users, DollarSign, GitBranch, Filter, X, AlertCircle, EyeOff, Eye } from 'lucide-react';
 import { Button, Badge, Card, Modal, Input, Select, EmptyState, Skeleton, Dropdown } from '../components/ui';
 import { flowsApi } from '../lib/api';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Flow, FlowStatus, TriggerType } from '../types';
 import { formatDistanceToNow } from 'date-fns';
@@ -63,13 +62,7 @@ export function FlowsPage() {
         const data = await flowsApi.list(brand.id);
         setFlows((data || []) as Flow[]);
       } catch {
-        // Fallback to direct query
-        const { data } = await supabase
-          .from('flows')
-          .select('*')
-          .eq('tenant_id', tenant.id)
-          .order('updated_at', { ascending: false });
-        if (data) setFlows(data as Flow[]);
+        setFlows([]);
       }
       setLoading(false);
     };

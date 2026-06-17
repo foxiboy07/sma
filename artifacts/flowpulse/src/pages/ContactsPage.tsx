@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Download, Upload, Merge, MoreVertical, Tag, Trash2, MessageSquare, ExternalLink, ChevronDown, X, FileUp, AlertCircle } from 'lucide-react';
 import { Button, Badge, LoyaltyBadge, PlatformIcon, EmptyState, Card, Modal } from '../components/ui';
 import { formatDistanceToNow } from 'date-fns';
-import { supabase } from '../lib/supabase';
+
 import { useAuth } from '../hooks/useAuth';
 import { loyaltyApi, contactsApi } from '../lib/api';
 
@@ -159,31 +159,16 @@ export function ContactsPage() {
     setLoading(true);
 
     try {
-      // Use the REST API to fetch contacts
-      const response = await contactsApi.list(brand.id, {});
+      // Use the REST API to fetch contacts (restApi already unwraps body.data)
+      const rows = await contactsApi.list(brand.id, {});
 
-      if (!response || !response.data) { setContacts([]); setLoading(false); return; }
+      if (!rows || !Array.isArray(rows)) { setContacts([]); setLoading(false); return; }
 
-      const rows = response.data;
-      const contactIds = rows.map((r: any) => r.id);
-
-      // Fetch platform_profiles for all contacts
-      const { data: profiles } = await supabase
-        .from('platform_profiles')
-        .select('unified_contact_id, platform, last_interaction_at')
-        .in('unified_contact_id', contactIds);
-
-      // Fetch conversations count per contact
-      const { data: convRows } = await supabase
-        .from('conversations')
-        .select('unified_contact_id, id')
-        .eq('tenant_id', tenant.id);
-
-      // Fetch attribution_events for revenue
-      const { data: attrRows } = await supabase
-        .from('attribution_events')
-        .select('unified_contact_id, revenue_attributed')
-        .eq('tenant_id', tenant.id);
+      // Platform profiles / conversations / attribution enrichment via API
+      // (gracefully empty until dedicated enrichment endpoints are added)
+      const profiles: any[] = [];
+      const convRows: any[] = [];
+      const attrRows: any[] = [];
 
       // Build lookup maps
       const profileMap = new Map<string, { platforms: string[]; lastInteraction: Date | null }>();

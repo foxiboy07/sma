@@ -12,7 +12,6 @@ import { KBDocument, KBIndexStatus, KBStrictness, KBSourceType } from '../types'
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { kbApi } from '../lib/api';
-import { supabase } from '../lib/supabase';
 
 // ---- Chunk type for viewer ----
 interface KBChunk {
@@ -76,33 +75,23 @@ export function KnowledgeBasePage() {
     if (!tenant?.id || !brand?.id) return;
     setLoadingDocs(true);
     try {
-      const { data, error } = await supabase
-        .from('kb_documents')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .eq('brand_id', brand.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const mapped: KBDocument[] = (data || []).map((d: any) => ({
-        id: d.id,
-        tenant_id: d.tenant_id,
-        brand_id: d.brand_id,
-        name: d.name,
-        source_type: d.source_type,
-        source_url: d.source_url,
-        index_status: d.index_status,
-        chunk_count: d.chunk_count ?? 0,
+      const raw = await kbApi.documents(tenant.id, brand.id);
+      const mapped: KBDocument[] = (raw?.documents ?? raw ?? []).map((d: any) => ({
+        id: d.id, tenant_id: d.tenantId ?? d.tenant_id ?? tenant.id,
+        brand_id: d.brandId ?? d.brand_id ?? brand.id,
+        name: d.name, source_type: d.sourceType ?? d.source_type,
+        source_url: d.sourceUrl ?? d.source_url,
+        index_status: d.indexStatus ?? d.index_status,
+        chunk_count: d.chunkCount ?? d.chunk_count ?? 0,
         strictness: d.strictness ?? 'BALANCED',
-        error_message: d.error_message,
-        content_preview: d.content_preview,
-        auto_reindex: d.auto_reindex ?? false,
-        last_indexed_at: d.last_indexed_at,
-        qa_question: d.qa_question,
-        qa_answer: d.qa_answer,
-        crawl_depth: d.crawl_depth ?? 1,
-        created_at: d.created_at,
+        error_message: d.errorMessage ?? d.error_message,
+        content_preview: d.contentPreview ?? d.content_preview,
+        auto_reindex: d.autoReindex ?? d.auto_reindex ?? false,
+        last_indexed_at: d.lastIndexedAt ?? d.last_indexed_at,
+        qa_question: d.qaQuestion ?? d.qa_question,
+        qa_answer: d.qaAnswer ?? d.qa_answer,
+        crawl_depth: d.crawlDepth ?? d.crawl_depth ?? 1,
+        created_at: d.createdAt ?? d.created_at,
       }));
       setDocs(mapped);
       setTotalChunks(mapped.reduce((sum, d) => sum + (d.index_status === 'INDEXED' ? d.chunk_count : 0), 0));
@@ -115,23 +104,6 @@ export function KnowledgeBasePage() {
       });
     } catch (err) {
       console.error('Failed to load KB documents:', err);
-      // Fallback: try edge function
-      try {
-        const data = await kbApi.documents(tenant.id, brand.id);
-        const mapped: KBDocument[] = (data.documents ?? data ?? []).map((d: any) => ({
-          id: d.id, tenant_id: d.tenant_id || tenant.id, brand_id: d.brand_id || brand.id,
-          name: d.name, source_type: d.source_type, source_url: d.source_url,
-          index_status: d.index_status, chunk_count: d.chunk_count ?? 0,
-          strictness: d.strictness ?? 'BALANCED', error_message: d.error_message,
-          content_preview: d.content_preview, auto_reindex: d.auto_reindex ?? false,
-          last_indexed_at: d.last_indexed_at, qa_question: d.qa_question,
-          qa_answer: d.qa_answer, crawl_depth: d.crawl_depth ?? 1, created_at: d.created_at,
-        }));
-        setDocs(mapped);
-        setTotalChunks(mapped.reduce((sum, d) => sum + (d.index_status === 'INDEXED' ? d.chunk_count : 0), 0));
-        setIndexedCount(mapped.filter(d => d.index_status === 'INDEXED').length);
-        setSelected(mapped[0] ?? null);
-      } catch (e2) { console.error('Edge function fallback also failed:', e2); }
     } finally {
       setLoadingDocs(false);
     }
@@ -147,15 +119,9 @@ export function KnowledgeBasePage() {
   async function loadChunks() {
     if (!selected) return;
     setLoadingChunks(true);
-    try {
-      const { data } = await supabase
-        .from('kb_chunks')
-        .select('id, chunk_index, content, token_count, document_id')
-        .eq('document_id', selected.id)
-        .order('chunk_index', { ascending: true });
-      setChunks(data || []);
-    } catch { setChunks([]); }
-    finally { setLoadingChunks(false); }
+    // Chunk viewer endpoint to be wired in a future iteration
+    setChunks([]);
+    setLoadingChunks(false);
   }
 
   const statusConfig = (s: KBIndexStatus) => ({

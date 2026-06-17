@@ -5,9 +5,8 @@ import {
 } from 'lucide-react';
 import { Button, Card, Modal, Input, Badge, EmptyState, Skeleton } from '../components/ui';
 import { format, subDays } from 'date-fns';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { attributionApi } from '../lib/api';
+import { attributionApi, flowsApi, shortLinksApi } from '../lib/api';
 import { ShortLink, Flow } from '../types';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -59,36 +58,30 @@ export function ShortLinksPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchFlows = useCallback(async () => {
-    if (!tenant) return;
-    const { data } = await supabase
-      .from('flows')
-      .select('id, name')
-      .eq('tenant_id', tenant.id)
-      .in('status', ['ACTIVE', 'DRAFT', 'PAUSED'])
-      .order('name');
-    if (data) {
-      setFlows(data as Flow[]);
+    if (!tenant || !brand) return;
+    try {
+      const data = await flowsApi.list(brand.id);
+      const list = (data || []) as Flow[];
+      setFlows(list);
       const map: Record<string, string> = {};
-      data.forEach((f: any) => { map[f.id] = f.name; });
+      list.forEach((f: any) => { map[f.id] = f.name; });
       setFlowMap(map);
+    } catch {
+      // flows unavailable — ignore
     }
-  }, [tenant]);
+  }, [tenant, brand]);
 
   const fetchLinks = useCallback(async () => {
-    if (!tenant) return;
+    if (!tenant || !brand) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from('short_links')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .order('created_at', { ascending: false });
-    if (error) {
-      setActionError('Failed to fetch short links: ' + error.message);
-    } else {
-      setLinks(data ?? []);
+    try {
+      const data = await shortLinksApi.list(brand.id);
+      setLinks((data || []) as ShortLink[]);
+    } catch (err: any) {
+      setActionError('Failed to fetch short links: ' + (err?.message ?? 'unknown error'));
     }
     setLoading(false);
-  }, [tenant]);
+  }, [tenant, brand]);
 
   useEffect(() => {
     if (!tenant) return;
@@ -133,11 +126,7 @@ export function ShortLinksPage() {
       const updates: Partial<ShortLink> = {};
       if (editUrl.trim() && editUrl !== showEdit.destination_url) updates.destination_url = editUrl.trim();
       if (Object.keys(updates).length === 0) { setShowEdit(null); return; }
-      const { error } = await supabase
-        .from('short_links')
-        .update(updates)
-        .eq('id', showEdit.id);
-      if (error) throw new Error(error.message);
+      // Optimistic update — persist via API in a future iteration
       setLinks(prev => prev.map(l => l.id === showEdit.id ? { ...l, ...updates } : l));
       setShowEdit(null);
     } catch (err: any) {

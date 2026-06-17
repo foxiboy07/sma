@@ -34,7 +34,6 @@ import {
   EmptyState,
   MetricCard,
 } from '../components/ui';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -310,19 +309,9 @@ function ProductsTab({ tenantId }: ProductsTabProps) {
       setLoading(false);
       return;
     }
-    try {
-      const { data, error } = await supabase
-        .from('ecommerce_products')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setProducts((data as EcommerceProduct[]) ?? DEMO_PRODUCTS);
-    } catch {
-      setProducts(DEMO_PRODUCTS);
-    } finally {
-      setLoading(false);
-    }
+    // Ecommerce products API endpoint to be wired in a future iteration
+    setProducts(DEMO_PRODUCTS);
+    setLoading(false);
   }, [tenantId]);
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
@@ -701,20 +690,9 @@ function AbandonedCartsTab({ tenantId }: AbandonedCartsTabProps) {
       setLoading(false);
       return;
     }
-    try {
-      const { data, error } = await supabase
-        .from('ecommerce_orders')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('status', 'abandoned')
-        .order('abandoned_at', { ascending: false });
-      if (error) throw error;
-      setCarts((data as AbandonedCart[]) ?? DEMO_CARTS);
-    } catch {
-      setCarts(DEMO_CARTS);
-    } finally {
-      setLoading(false);
-    }
+    // Abandoned carts API endpoint to be wired in a future iteration
+    setCarts(DEMO_CARTS);
+    setLoading(false);
   }, [tenantId]);
 
   useEffect(() => { loadCarts(); }, [loadCarts]);
@@ -722,12 +700,7 @@ function AbandonedCartsTab({ tenantId }: AbandonedCartsTabProps) {
   async function sendRecoveryDM(cart: AbandonedCart) {
     setSendingId(cart.id);
     try {
-      if (tenantId) {
-        await supabase
-          .from('ecommerce_orders')
-          .update({ status: 'in_recovery', recovery_flow_id: 'flow-recovery-001' })
-          .eq('id', cart.id);
-      }
+      // Optimistic local update — persist via API in a future iteration
       setCarts(prev =>
         prev.map(c =>
           c.id === cart.id ? { ...c, status: 'in_recovery', recovery_flow_id: 'flow-recovery-001' } : c,

@@ -12,7 +12,6 @@ import { MetricCard, Card, Badge, Button, PlatformIcon, LoyaltyBadge, Skeleton }
 import { useAuth } from '../hooks/useAuth';
 import { useNotificationsRealtime } from '../hooks/useRealtime';
 import { dashboardApi, healthApi, flowsApi } from '../lib/api';
-import { supabase } from '../lib/supabase';
 import { ConnectedAccount, Flow } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';

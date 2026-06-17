@@ -12,7 +12,6 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { supabase } from '../lib/supabase';
 import { broadcastApi } from '../lib/api';
 import { Broadcast, Segment } from '../types';
 
@@ -509,18 +508,9 @@ export function BroadcastsPage() {
   }, [tenant?.id, brand?.id]);
 
   const fetchSegments = useCallback(async () => {
-    if (!tenant?.id) return;
-    try {
-      const { data } = await supabase
-        .from('segments')
-        .select('id, name, description, member_count, filter_rules, is_static, created_at, updated_at, tenant_id, brand_id')
-        .eq('tenant_id', tenant.id)
-        .order('name');
-      setSegments((data as Segment[]) ?? []);
-    } catch {
-      // segments are optional; fail silently
-    }
-  }, [tenant?.id]);
+    // Segments endpoint to be wired in a future iteration
+    setSegments([]);
+  }, []);
 
   useEffect(() => {
     fetchBroadcasts();
@@ -531,46 +521,22 @@ export function BroadcastsPage() {
   // Reach estimation
   // ---------------------------------------------------------------------------
 
-  const estimateReach = useCallback(async (segmentId: string | null, platform: Platform) => {
-    if (!tenant?.id || !brand?.id) return;
+  const estimateReach = useCallback(async (segmentId: string | null, _platform: Platform) => {
     setReachLoading(true);
     try {
-      let query = supabase
-        .from('platform_profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant.id)
-        .eq('brand_id', brand.id)
-        .eq('platform', platform);
-
-      // If a specific segment is selected, fetch its member_count as a proxy
       if (segmentId) {
         const seg = segments.find((s) => s.id === segmentId);
         setReachCount(seg?.member_count ?? 0);
-        setWindowCount(Math.round((seg?.member_count ?? 0) * 0.42)); // heuristic ~42%
-        setReachLoading(false);
+        setWindowCount(Math.round((seg?.member_count ?? 0) * 0.42));
         return;
       }
-
-      const { count: total } = await query;
-      setReachCount(total ?? 0);
-
-      // Window eligible: contacts with last_interaction_at within 24h
-      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { count: window } = await supabase
-        .from('platform_profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant.id)
-        .eq('brand_id', brand.id)
-        .eq('platform', platform)
-        .gte('last_interaction_at', cutoff);
-      setWindowCount(window ?? 0);
-    } catch {
+      // Reach estimation endpoint to be wired in a future iteration
       setReachCount(0);
       setWindowCount(0);
     } finally {
       setReachLoading(false);
     }
-  }, [tenant?.id, brand?.id, segments]);
+  }, [segments]);
 
   useEffect(() => {
     if (showComposer && composerStep === 1) {

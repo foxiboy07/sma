@@ -1,10 +1,37 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { unifiedContactsTable } from "@workspace/db";
-import { eq, and, ilike } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { nanoid } from "nanoid";
 
 const router = Router();
+
+// POST /api/brands/:id/contacts — create a new contact (used by CSV import)
+router.post("/brands/:id/contacts", requireAuth, async (req, res): Promise<void> => {
+  const brandId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const {
+    displayName, email, phone, tags, loyaltyTier, loyaltyScore,
+    sentimentScore, gdprOptIn, customFields,
+  } = req.body;
+  try {
+    const [contact] = await db.insert(unifiedContactsTable).values({
+      tenantId: req.user!.tenantId,
+      brandId,
+      displayName: displayName ?? null,
+      email: email ?? null,
+      phone: phone ?? null,
+      tags: tags ?? [],
+      loyaltyTier: loyaltyTier ?? "NEWBIE",
+      loyaltyScore: loyaltyScore ?? 0,
+      sentimentScore: String(sentimentScore ?? "0.5"),
+      customFields: customFields ?? {},
+    }).returning();
+    res.status(201).json({ data: contact });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? "Failed to create contact" });
+  }
+});
 
 // GET /api/brands/:id/contacts
 router.get("/brands/:id/contacts", requireAuth, async (req, res): Promise<void> => {

@@ -25,7 +25,6 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Button, Card, Modal, Badge, Tabs, Input, Select, Toggle, EmptyState, MetricCard } from '../components/ui';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
 // ---- Types ----
@@ -871,25 +870,11 @@ export function GrowthToolsPage() {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  // Fetch from supabase
   const fetchTools = useCallback(async () => {
     if (!tenant) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from('growth_tools')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      // Fall back to demo data if table doesn't exist yet
-      setTools(DEMO_TOOLS.map(t => ({ ...t, tenant_id: tenant.id, brand_id: brand?.id ?? '' })));
-    } else if (data && data.length > 0) {
-      setTools(data as GrowthTool[]);
-    } else {
-      // No real data yet — use demo seed data
-      setTools(DEMO_TOOLS.map(t => ({ ...t, tenant_id: tenant.id, brand_id: brand?.id ?? '' })));
-    }
+    // Growth tools API endpoint to be wired in a future iteration — use demo data
+    setTools(DEMO_TOOLS.map(t => ({ ...t, tenant_id: tenant.id, brand_id: brand?.id ?? '' })));
     setLoading(false);
   }, [tenant, brand]);
 
@@ -916,64 +901,24 @@ export function GrowthToolsPage() {
       created_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from('growth_tools')
-      .insert({
-        tenant_id: tenant.id,
-        brand_id: brand.id,
-        tool_type: newTool.tool_type,
-        name: newTool.name,
-        platform: newTool.platform,
-        linked_flow_id: newTool.linked_flow_id,
-        linked_flow_name: newTool.linked_flow_name,
-        config: newTool.config,
-        click_count: 0,
-        conversion_count: 0,
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      // Still add locally for demo purposes
-      setTools(prev => [newTool, ...prev]);
-    } else {
-      setTools(prev => [data as GrowthTool, ...prev]);
-    }
+    // Local insert — persist via API in a future iteration
+    setTools(prev => [newTool, ...prev]);
     setShowCreate(false);
     toast(`"${newTool.name}" created successfully`);
   }
 
   // Toggle active
   async function handleToggle(id: string, active: boolean) {
+    // Local update — persist via API in a future iteration
     setTools(prev => prev.map(t => (t.id === id ? { ...t, is_active: active } : t)));
-    const { error } = await supabase
-      .from('growth_tools')
-      .update({ is_active: active })
-      .eq('id', id);
-    if (error) {
-      // Revert on error
-      setTools(prev => prev.map(t => (t.id === id ? { ...t, is_active: !active } : t)));
-      toast('Failed to update — please retry');
-    } else {
-      toast(active ? 'Tool activated' : 'Tool deactivated');
-    }
+    toast(active ? 'Tool activated' : 'Tool deactivated');
   }
 
   // Delete
   async function handleDelete(id: string) {
+    // Local delete — persist via API in a future iteration
     setTools(prev => prev.filter(t => t.id !== id));
-    const { error } = await supabase
-      .from('growth_tools')
-      .delete()
-      .eq('id', id);
-    if (error) {
-      // Re-fetch on error
-      fetchTools();
-      toast('Delete failed — please retry');
-    } else {
-      toast('Tool deleted');
-    }
+    toast('Tool deleted');
   }
 
   // Filtered tools

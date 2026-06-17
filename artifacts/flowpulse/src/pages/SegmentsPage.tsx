@@ -6,7 +6,6 @@ import {
   AlertTriangle, ArrowRight, RefreshCw, Copy,
 } from 'lucide-react';
 import { Button, Badge, Modal, Input, Select, EmptyState, MetricCard, Tabs, Dropdown } from '../components/ui';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { formatDistanceToNow, format } from 'date-fns';
 
@@ -231,59 +230,9 @@ function FilterRow({ rule, onChange, onRemove, canRemove }: FilterRowProps) {
 
 // ---- Live preview hook -----------------------------------------------------
 
-function useLiveCount(rules: FilterRule[], tenantId: string | undefined, debounceMs = 600) {
-  const [count, setCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const fetchCount = useCallback(async (r: FilterRule[], tid: string) => {
-    setLoading(true);
-    try {
-      let query = supabase
-        .from('unified_contacts')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tid)
-        .is('gdpr_deleted_at', null);
-
-      for (const rule of r) {
-        if (!rule.value) continue;
-        if (rule.field === 'loyalty_tier') {
-          if (rule.operator === 'eq') query = query.eq('loyalty_tier', rule.value);
-          else query = query.neq('loyalty_tier', rule.value);
-        } else if (rule.field === 'tags') {
-          if (rule.operator === 'contains') query = query.contains('tags', [rule.value]);
-          else query = query.eq('tags', rule.value);
-        } else if (rule.field === 'sentiment_score') {
-          const n = parseFloat(rule.value);
-          if (!isNaN(n)) {
-            if (rule.operator === 'gt') query = query.gt('sentiment_score', n);
-            else if (rule.operator === 'lt') query = query.lt('sentiment_score', n);
-            else query = query.eq('sentiment_score', n);
-          }
-        }
-      }
-
-      const { count: c, error } = await query;
-      if (!error && c !== null) setCount(c);
-    } catch {
-      // silently ignore
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!tenantId) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      fetchCount(rules, tenantId);
-    }, debounceMs);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [rules, tenantId, fetchCount, debounceMs]);
-
-  return { count, loading };
+function useLiveCount(_rules: FilterRule[], _tenantId: string | undefined, _debounceMs = 600) {
+  // Live count estimation endpoint to be wired in a future iteration
+  return { count: null as number | null, loading: false };
 }
 
 // ---- Main Page -------------------------------------------------------------
@@ -335,98 +284,18 @@ export function SegmentsPage() {
   async function loadSegments() {
     if (!tenant) return;
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('segments')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .order('created_at', { ascending: false });
-
-      if (!error && data && data.length > 0) {
-        // Enrich with member counts from contact_segments
-        const ids = data.map((s: any) => s.id);
-        const { data: csMapped } = await supabase
-          .from('contact_segments')
-          .select('segment_id')
-          .in('segment_id', ids);
-
-        const countMap = new Map<string, number>();
-        (csMapped || []).forEach((cs: any) => {
-          countMap.set(cs.segment_id, (countMap.get(cs.segment_id) || 0) + 1);
-        });
-
-        setSegments(data.map((s: any) => ({
-          ...s,
-          member_count: countMap.get(s.id) ?? s.member_count ?? 0,
-          filter_rules: Array.isArray(s.filter_rules) ? s.filter_rules : [],
-        })));
-      } else {
-        // Fall back to demo data
-        setSegments(DEMO_SEGMENTS);
-      }
-    } catch {
-      setSegments(DEMO_SEGMENTS);
-    } finally {
-      setLoading(false);
-    }
+    // Segments API endpoint to be wired in a future iteration — show demo data
+    setSegments(DEMO_SEGMENTS);
+    setLoading(false);
   }
 
   // ---- Load detail contacts ------------------------------------------------
 
-  async function loadDetailContacts(segment: Segment) {
-    if (!tenant) return;
+  async function loadDetailContacts(_segment: Segment) {
     setDetailLoading(true);
+    // Segment contact detail endpoint to be wired in a future iteration
     setDetailContacts([]);
-    try {
-      // Fetch contact IDs from contact_segments
-      const { data: csRows } = await supabase
-        .from('contact_segments')
-        .select('unified_contact_id')
-        .eq('segment_id', segment.id)
-        .limit(50);
-
-      const contactIds = (csRows || []).map((r: any) => r.unified_contact_id);
-
-      if (contactIds.length === 0) {
-        // Fallback: query by filter rules directly
-        let q = supabase
-          .from('unified_contacts')
-          .select('id, display_name, email, loyalty_tier, sentiment_score, tags, created_at')
-          .eq('tenant_id', tenant.id)
-          .is('gdpr_deleted_at', null)
-          .limit(50);
-
-        for (const rule of segment.filter_rules) {
-          if (!rule.value) continue;
-          if (rule.field === 'loyalty_tier') {
-            if (rule.operator === 'eq') q = q.eq('loyalty_tier', rule.value);
-            else q = q.neq('loyalty_tier', rule.value);
-          } else if (rule.field === 'tags') {
-            if (rule.operator === 'contains') q = q.contains('tags', [rule.value]);
-          } else if (rule.field === 'sentiment_score') {
-            const n = parseFloat(rule.value);
-            if (!isNaN(n)) {
-              if (rule.operator === 'gt') q = q.gt('sentiment_score', n);
-              else if (rule.operator === 'lt') q = q.lt('sentiment_score', n);
-            }
-          }
-        }
-
-        const { data } = await q;
-        setDetailContacts((data || []) as ContactRow[]);
-      } else {
-        const { data } = await supabase
-          .from('unified_contacts')
-          .select('id, display_name, email, loyalty_tier, sentiment_score, tags, created_at')
-          .in('id', contactIds)
-          .is('gdpr_deleted_at', null);
-        setDetailContacts((data || []) as ContactRow[]);
-      }
-    } catch {
-      setDetailContacts([]);
-    } finally {
-      setDetailLoading(false);
-    }
+    setDetailLoading(false);
   }
 
   // ---- Open Detail ---------------------------------------------------------
@@ -476,35 +345,11 @@ export function SegmentsPage() {
       };
 
       if (isEditing && activeSegment) {
-        const { data, error } = await supabase
-          .from('segments')
-          .update(payload)
-          .eq('id', activeSegment.id)
-          .select()
-          .single();
-
-        if (!error && data) {
-          setSegments(prev => prev.map(s => s.id === activeSegment.id ? { ...s, ...payload } : s));
-        } else {
-          // Demo mode: local update
-          setSegments(prev => prev.map(s => s.id === activeSegment.id ? { ...s, ...payload } : s));
-        }
+        // Local update — persist via API in a future iteration
+        setSegments(prev => prev.map(s => s.id === activeSegment.id ? { ...s, ...payload } : s));
       } else {
-        const { data, error } = await supabase
-          .from('segments')
-          .insert({
-            tenant_id: tenant.id,
-            ...payload,
-            member_count: liveCount ?? 0,
-            created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
-
-        if (!error && data) {
-          setSegments(prev => [{ ...data, filter_rules: formRules }, ...prev]);
-        } else {
-          // Demo mode: local insert
+        {
+          // Local insert — persist via API in a future iteration
           const newSeg: Segment = {
             id: uid(),
             tenant_id: tenant.id,
