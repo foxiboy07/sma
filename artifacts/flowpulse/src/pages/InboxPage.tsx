@@ -7,9 +7,8 @@ import {
   MessageSquare, ChevronDown, UserCheck
 } from 'lucide-react';
 import { Badge, Toggle, LoyaltyBadge, PlatformIcon } from '../components/ui';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { aiApi, gdprApi, inboxApi } from '../lib/api';
+import { aiApi, gdprApi, inboxApi, contactsApi } from '../lib/api';
 
 interface ConvRow {
   id: string;
@@ -199,12 +198,8 @@ export function InboxPage() {
     if (!tenantId || teamMembers.length > 0) return;
     setTeamMembersLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('team_members')
-        .select('id, display_name, email')
-        .eq('tenant_id', tenantId)
-        .eq('role', 'agent');
-      if (!error) setTeamMembers((data || []) as TeamMember[]);
+      // Team members served via API in a future iteration
+      setTeamMembers([]);
     } catch {
       // ignore
     } finally {
@@ -215,7 +210,7 @@ export function InboxPage() {
   async function assignToAgent(agentId: string | null) {
     if (!activeConv) return;
     try {
-      await inboxApi.updateConversation(activeConv.id, { assignedAgentId: agentId });
+      await inboxApi.updateConversation(activeConv.id, { assignedAgentId: agentId ?? undefined });
       setAssignedAgent(agentId);
     } catch (err) {
       console.error('Failed to assign agent:', err);
@@ -226,17 +221,12 @@ export function InboxPage() {
   async function markAsRead(convId: string) {
     setMarkingRead(convId);
     try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({ unread_count: 0 })
-        .eq('id', convId);
-      if (!error) {
-        setConversations(prev =>
-          prev.map(c => c.id === convId ? { ...c, unread_count: 0 } : c)
-        );
-        if (activeConv?.id === convId) {
-          setActiveConv(prev => prev ? { ...prev, unread_count: 0 } : prev);
-        }
+      await inboxApi.updateConversation(convId, { status: 'HUMAN' });
+      setConversations(prev =>
+        prev.map(c => c.id === convId ? { ...c, unread_count: 0 } : c)
+      );
+      if (activeConv?.id === convId) {
+        setActiveConv(prev => prev ? { ...prev, unread_count: 0 } : prev);
       }
     } catch (err) {
       console.error('Failed to mark as read:', err);
@@ -249,12 +239,8 @@ export function InboxPage() {
     if (!tenantId) return;
     setProductsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('ecommerce_products')
-        .select('id, title, price, image_url')
-        .eq('tenant_id', tenantId)
-        .limit(50);
-      if (!error) setProducts((data || []) as { id: string; title: string; price: number; image_url: string | null }[]);
+      // Products served via API in a future iteration
+      setProducts([]);
     } catch {
       // ignore
     } finally {
@@ -284,7 +270,7 @@ export function InboxPage() {
     async function fetchConversations() {
       setConversationsLoading(true);
       try {
-        const data = await inboxApi.conversations(tenantId, { limit: 100 });
+        const data = await inboxApi.conversations(tenantId!, { limit: '100' });
         if (!cancelled) {
           const rows = (data || []) as unknown as ConvRow[];
           setConversations(rows);
@@ -304,18 +290,8 @@ export function InboxPage() {
 
     fetchConversations();
 
-    // Subscribe to real-time inserts/updates on conversations
-    const channel = supabase
-      .channel('inbox-conversations')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${tenantId}` },
-        () => { fetchConversations(); }
-      )
-      .subscribe();
-
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
@@ -346,17 +322,6 @@ export function InboxPage() {
 
     fetchMessages();
 
-    // Subscribe to new messages in this conversation
-    const channel = supabase
-      .channel(`inbox-messages-${activeConv.id}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConv.id}` },
-        (payload) => {
-          setMessages(prev => [...prev, payload.new as MessageRow]);
-        }
-      )
-      .subscribe();
-
     // Reset message search when changing conversation
     setMessageSearch('');
     setShowMessageSearch(false);
@@ -364,7 +329,6 @@ export function InboxPage() {
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
     };
   }, [activeConv]);
 
@@ -381,85 +345,32 @@ export function InboxPage() {
       const contactId = activeConv!.unified_contact_id;
 
       try {
-        // Fetch the contact
-        const { data: contactData, error: contactError } = await supabase
-          .from('unified_contacts')
-          .select('id, display_name, email, phone, loyalty_score, loyalty_tier, tags, sentiment_score, notes')
-          .eq('id', contactId)
-          .maybeSingle();
+        const contactData: any = await contactsApi.get(contactId);
 
-        if (contactError) throw contactError;
         if (!contactData || cancelled) {
           if (!cancelled) setContactLoading(false);
           return;
-        }
-
-        // Fetch platform profiles
-        const { data: profiles } = await supabase
-          .from('platform_profiles')
-          .select('platform, platform_username')
-          .eq('unified_contact_id', contactId);
-
-        // Fetch attribution events (revenue & purchase count)
-        const { data: attribution } = await supabase
-          .from('attribution_events')
-          .select('event_type, revenue_attributed')
-          .eq('unified_contact_id', contactId);
-
-        const totalRevenue = (attribution || []).reduce((sum, e) => sum + Number(e.revenue_attributed || 0), 0);
-        const purchaseCount = (attribution || []).filter(e => e.event_type === 'PURCHASE_ATTRIBUTED').length;
-
-        // Fetch active flow session
-        const { data: flowSessions } = await supabase
-          .from('flow_sessions')
-          .select('flow_id, current_node_id, is_active')
-          .eq('unified_contact_id', contactId)
-          .eq('is_active', true)
-          .limit(1);
-
-        let flowName: string | null = null;
-        let currentNodeLabel: string | null = null;
-
-        if (flowSessions && flowSessions.length > 0) {
-          const session = flowSessions[0];
-          // Fetch flow name
-          const { data: flowData } = await supabase
-            .from('flows')
-            .select('name')
-            .eq('id', session.flow_id)
-            .maybeSingle();
-          flowName = flowData?.name ?? null;
-
-          // Fetch current node label
-          if (session.current_node_id) {
-            const { data: nodeData } = await supabase
-              .from('flow_nodes')
-              .select('label')
-              .eq('id', session.current_node_id)
-              .maybeSingle();
-            currentNodeLabel = nodeData?.label ?? null;
-          }
         }
 
         if (!cancelled) {
           setContact({
             id: contactData.id,
             display_name: contactData.display_name || 'Unknown',
-            email: contactData.email,
-            phone: contactData.phone,
+            email: contactData.email ?? undefined,
+            phone: contactData.phone ?? undefined,
             loyalty_score: contactData.loyalty_score ?? 0,
             loyalty_tier: contactData.loyalty_tier ?? 'NEWBIE',
             tags: contactData.tags || [],
             sentiment_score: Number(contactData.sentiment_score ?? 0),
             notes: contactData.notes,
-            platforms: (profiles || []).map(p => ({
+            platforms: (contactData.platform_profiles || []).map((p: any) => ({
               platform: p.platform,
               username: p.platform_username ?? null,
             })),
-            revenue: totalRevenue,
-            purchases: purchaseCount,
-            flow: flowName,
-            currentNode: currentNodeLabel,
+            revenue: contactData.revenue ?? 0,
+            purchases: contactData.purchases ?? 0,
+            flow: contactData.active_flow ?? null,
+            currentNode: contactData.current_node ?? null,
           });
         }
       } catch (err) {
@@ -645,7 +556,7 @@ export function InboxPage() {
               onClick={() => setPlatformFilter(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
               className={`flex items-center gap-1 px-2 py-1.5 md:px-1.5 md:py-1 rounded text-xs md:text-[10px] transition-colors active:scale-95 ${platformFilter.includes(p) ? 'bg-blue-500/20 text-blue-400' : 'text-[#4B5068] hover:text-[#F0F2FF]'}`}
             >
-              <PlatformIcon platform={p} size={14} className="md:!w-3 md:!h-3" />
+              <PlatformIcon platform={p} size={14} />
             </button>
           ))}
         </div>
@@ -705,7 +616,7 @@ export function InboxPage() {
                   <ChevronRight className="w-5 h-5 rotate-180" />
                 </button>
                 <div className="flex items-center gap-2">
-                  <PlatformIcon platform={activeConv.platform} size={18} className="md:!w-4 md:!h-4" />
+                  <PlatformIcon platform={activeConv.platform} size={18} />
                   <span className="text-base md:text-sm font-semibold text-[#F0F2FF]">{activeConvName}</span>
                   <Badge variant={activeConv.status === 'BOT' ? 'info' : activeConv.status === 'HUMAN' ? 'success' : 'default'} className="text-[10px] hidden sm:inline-flex">
                     {activeConv.status}

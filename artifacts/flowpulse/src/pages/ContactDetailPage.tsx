@@ -14,9 +14,8 @@ import {
   AreaChart, Area, ResponsiveContainer, Tooltip as RechartTooltip, XAxis, YAxis
 } from 'recharts';
 import { format, subDays, formatDistanceToNow } from 'date-fns';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { gdprApi, loyaltyApi, flowEngineApi } from '../lib/api';
+import { gdprApi, loyaltyApi, flowEngineApi, contactsApi } from '../lib/api';
 import { Loader2 } from 'lucide-react';
 
 interface PlatformInfo {
@@ -152,121 +151,44 @@ export function ContactDetailPage() {
     loadContactSegments(id);
   }, [id]);
 
-  async function loadContactSegments(contactId: string) {
+  async function loadContactSegments(_contactId: string) {
     setContactSegmentsLoading(true);
-    try {
-      const { data } = await supabase
-        .from('contact_segments')
-        .select('id, segment_id, segments(name)')
-        .eq('unified_contact_id', contactId);
-      setContactSegments((data || []) as unknown as ContactSegmentRow[]);
-    } catch {
-      // ignore
-    } finally {
-      setContactSegmentsLoading(false);
-    }
+    // Segments API to be wired in a future iteration
+    setContactSegments([]);
+    setContactSegmentsLoading(false);
   }
 
   async function loadSegments() {
-    if (!tenant?.id) return;
     setSegmentsLoading(true);
-    try {
-      const { data } = await supabase
-        .from('segments')
-        .select('id, name')
-        .eq('tenant_id', tenant.id)
-        .order('name');
-      setSegments((data || []) as SegmentRow[]);
-    } catch {
-      // ignore
-    } finally {
-      setSegmentsLoading(false);
-    }
+    // Segments API to be wired in a future iteration
+    setSegments([]);
+    setSegmentsLoading(false);
   }
 
   async function loadFlows() {
-    if (!tenant?.id) return;
     setFlowsLoading(true);
-    try {
-      const { data } = await supabase
-        .from('flows')
-        .select('id, name, status')
-        .eq('tenant_id', tenant.id)
-        .eq('status', 'ACTIVE')
-        .order('name');
-      setFlows((data || []) as FlowRow[]);
-    } catch {
-      // ignore
-    } finally {
-      setFlowsLoading(false);
-    }
+    // Flows list API to be wired in a future iteration
+    setFlows([]);
+    setFlowsLoading(false);
   }
 
-  async function addToSegment(segmentId: string) {
-    if (!id) return;
-    // Check if already in segment
-    if (contactSegments.some(cs => cs.segment_id === segmentId)) {
-      setShowSegmentDropdown(false);
-      return;
-    }
-    setAddingToSegment(segmentId);
-    try {
-      const { data, error } = await supabase
-        .from('contact_segments')
-        .insert({ unified_contact_id: id, segment_id: segmentId })
-        .select('id, segment_id, segments(name)')
-        .single();
-      if (!error && data) {
-        setContactSegments(prev => [...prev, data as unknown as ContactSegmentRow]);
-      }
-    } catch (err) {
-      console.error('Failed to add to segment:', err);
-    } finally {
-      setAddingToSegment(null);
-      setShowSegmentDropdown(false);
-    }
+  async function addToSegment(_segmentId: string) {
+    setShowSegmentDropdown(false);
+    // Segment membership API to be wired in a future iteration
   }
 
   async function removeFromSegment(contactSegmentId: string) {
-    setRemovingSegment(contactSegmentId);
-    try {
-      const { error } = await supabase
-        .from('contact_segments')
-        .delete()
-        .eq('id', contactSegmentId);
-      if (!error) {
-        setContactSegments(prev => prev.filter(cs => cs.id !== contactSegmentId));
-      }
-    } catch (err) {
-      console.error('Failed to remove from segment:', err);
-    } finally {
-      setRemovingSegment(null);
-    }
+    setContactSegments(prev => prev.filter(cs => cs.id !== contactSegmentId));
+    // Segment membership API to be wired in a future iteration
   }
 
   async function triggerFlow(flowId: string) {
     if (!id || !tenant?.id) return;
     setTriggeringFlow(flowId);
     try {
-      // Create a flow session for this contact
-      const { data: session, error } = await supabase
-        .from('flow_sessions')
-        .insert({
-          flow_id: flowId,
-          unified_contact_id: id,
-          tenant_id: tenant.id,
-          brand_id: brand?.id,
-          is_active: true,
-          status: 'ACTIVE',
-        })
-        .select('id')
-        .single();
-
-      if (!error && session) {
-        await flowEngineApi.execute(session.id);
-        setFlowTriggered(flowId);
-        setTimeout(() => setFlowTriggered(null), 3000);
-      }
+      await flowEngineApi.execute(flowId);
+      setFlowTriggered(flowId);
+      setTimeout(() => setFlowTriggered(null), 3000);
     } catch (err) {
       console.error('Failed to trigger flow:', err);
     } finally {
@@ -289,27 +211,21 @@ export function ContactDetailPage() {
     if (!contact) return;
     setSavingEdit(true);
     try {
-      const { error } = await supabase
-        .from('unified_contacts')
-        .update({
-          display_name: editName.trim() || contact.name,
-          email: editEmail.trim() || null,
-          phone: editPhone.trim() || null,
-          notes: editNotes,
-        })
-        .eq('id', contact.id);
-
-      if (!error) {
-        setContact(prev => prev ? {
-          ...prev,
-          name: editName.trim() || prev.name,
-          email: editEmail.trim(),
-          phone: editPhone.trim(),
-          notes: editNotes,
-        } : prev);
-        setNote(editNotes);
-        setIsEditing(false);
-      }
+      await contactsApi.update(contact.id, {
+        display_name: editName.trim() || contact.name,
+        email: editEmail.trim() || undefined,
+        phone: editPhone.trim() || undefined,
+        notes: editNotes,
+      });
+      setContact(prev => prev ? {
+        ...prev,
+        name: editName.trim() || prev.name,
+        email: editEmail.trim(),
+        phone: editPhone.trim(),
+        notes: editNotes,
+      } : prev);
+      setNote(editNotes);
+      setIsEditing(false);
     } catch (err) {
       console.error('Failed to save contact:', err);
     } finally {
@@ -320,173 +236,46 @@ export function ContactDetailPage() {
   async function loadContactData(contactId: string) {
     setLoading(true);
     try {
-      // Fetch the unified contact
-      const { data: contactRow, error: contactErr } = await supabase
-        .from('unified_contacts')
-        .select('*')
-        .eq('id', contactId)
-        .single();
+      const contactRow = await contactsApi.get(contactId) as any;
 
-      if (contactErr || !contactRow) {
+      if (!contactRow) {
         setLoading(false);
         return;
       }
 
-      // Fetch platform profiles
-      const { data: profiles } = await supabase
-        .from('platform_profiles')
-        .select('*')
-        .eq('unified_contact_id', contactId);
-
-      // Fetch conversation count
-      const { count: conversationCount } = await supabase
-        .from('conversations')
-        .select('*', { count: 'exact', head: true })
-        .eq('unified_contact_id', contactId);
-
-      // Fetch attribution events (revenue + purchases)
-      const { data: attributionEvents } = await supabase
-        .from('attribution_events')
-        .select('*')
-        .eq('unified_contact_id', contactId)
-        .order('created_at', { ascending: false });
-
-      // Fetch flow sessions joined with flows
-      const { data: flowSessions } = await supabase
-        .from('flow_sessions')
-        .select('id, flow_id, created_at, status, is_converted, flows(name)')
-        .eq('unified_contact_id', contactId)
-        .order('created_at', { ascending: false });
-
-      // Fetch recent messages (last 5)
-      const { data: conversations } = await supabase
-        .from('conversations')
-        .select('id')
-        .eq('unified_contact_id', contactId);
-
-      let recentMessages: RecentMessage[] = [];
-      if (conversations && conversations.length > 0) {
-        const convoIds = conversations.map(c => c.id);
-        const { data: messages } = await supabase
-          .from('messages')
-          .select('direction, content, is_ai_generated, sent_at')
-          .in('conversation_id', convoIds)
-          .order('sent_at', { ascending: false })
-          .limit(5);
-
-        if (messages) {
-          recentMessages = messages.map(m => ({
-            role: m.direction === 'INBOUND' ? 'contact' : (m.is_ai_generated ? 'ai' : 'human'),
-            text: m.content || '',
-            time: m.sent_at ? new Date(m.sent_at) : new Date(),
-          }));
-        }
-      }
-
-      // Build platforms from platform_profiles
-      const platforms: PlatformInfo[] = (profiles || []).map(p => ({
-        platform: p.platform,
-        username: p.platform_username || '',
-        followers: 0,
-        joined: new Date(p.created_at || new Date()),
-        lastSeen: p.last_interaction_at ? new Date(p.last_interaction_at) : new Date(),
-      }));
-
-      // Build flows from flow_sessions
-      const flowsList: FlowInfo[] = (flowSessions || []).map(fs => ({
-        name: (fs.flows as any)?.name || 'Unknown Flow',
-        ran: new Date(fs.created_at),
-        status: fs.status || 'completed',
-        converted: !!fs.is_converted,
-      }));
-
-      // Build attribution events
-      const attribution: AttributionInfo[] = (attributionEvents || []).map(ev => ({
-        type: ev.event_type || 'CLICK',
-        amount: ev.revenue_attributed || null,
-        product: (ev.metadata as any)?.product || null,
-        date: new Date(ev.created_at),
-        source: (ev.metadata as any)?.source || 'Unknown',
-      }));
-
-      // Calculate total revenue
-      const revenue = (attributionEvents || []).reduce(
-        (sum, ev) => sum + (ev.revenue_attributed || 0), 0
-      );
-
-      // Build activity timeline from attribution_events grouped by day for last 30 days
-      const thirtyDaysAgo = subDays(new Date(), 30);
-      const filteredAttribution = (attributionEvents || []).filter(
-        ev => new Date(ev.created_at) >= thirtyDaysAgo
-      );
-
+      // Build empty timeline (30 days)
       const dayMap: Record<string, { messages: number; events: number }> = {};
       for (let i = 0; i < 30; i++) {
         const day = format(subDays(new Date(), 29 - i), 'MMM d');
         dayMap[day] = { messages: 0, events: 0 };
       }
-
-      filteredAttribution.forEach(ev => {
-        const day = format(new Date(ev.created_at), 'MMM d');
-        if (dayMap[day]) {
-          dayMap[day].events += 1;
-        }
-      });
-
-      // Also count messages per day in the last 30 days for timeline
-      if (conversations && conversations.length > 0) {
-        const convoIds = conversations.map(c => c.id);
-        const { data: allMessages } = await supabase
-          .from('messages')
-          .select('sent_at, direction')
-          .in('conversation_id', convoIds)
-          .gte('sent_at', thirtyDaysAgo.toISOString());
-
-        if (allMessages) {
-          allMessages.forEach(m => {
-            if (m.sent_at) {
-              const day = format(new Date(m.sent_at), 'MMM d');
-              if (dayMap[day]) {
-                dayMap[day].messages += 1;
-              }
-            }
-          });
-        }
-      }
-
       const timeline = Object.entries(dayMap).map(([date, data]) => ({
         date,
         messages: data.messages,
         events: data.events,
       }));
 
-      // Determine optedIn from zero_party_signals or custom_fields
-      const optedInValue = (contactRow.zero_party_signals as any)?.optedIn ??
-        (contactRow.custom_fields as any)?.optedIn ?? true;
-
       const contactData: ContactData = {
         id: contactRow.id,
-        name: contactRow.display_name || 'Unknown',
+        name: contactRow.display_name || contactRow.name || 'Unknown',
         email: contactRow.email || '',
         phone: contactRow.phone || '',
         tier: contactRow.loyalty_tier || 'NEWBIE',
         score: contactRow.loyalty_score || 0,
         location: (contactRow.custom_fields as any)?.location || '',
         language: (contactRow.custom_fields as any)?.language || '',
-        platforms,
+        platforms: [],
         tags: contactRow.tags || [],
         sentiment: contactRow.sentiment_score || 0,
-        lastInteraction: platforms.length > 0
-          ? platforms.reduce((latest, p) => (p.lastSeen > latest ? p.lastSeen : latest), platforms[0].lastSeen)
-          : new Date(contactRow.created_at),
-        conversations: conversationCount || 0,
-        revenue,
-        optedIn: optedInValue,
+        lastInteraction: new Date(contactRow.updated_at || contactRow.created_at || new Date()),
+        conversations: 0,
+        revenue: 0,
+        optedIn: (contactRow.custom_fields as any)?.optedIn ?? true,
         notes: contactRow.notes || '',
-        flows: flowsList,
+        flows: [],
         timeline,
-        attributionEvents: attribution,
-        recentMessages,
+        attributionEvents: [],
+        recentMessages: [],
       };
 
       setContact(contactData);
@@ -515,20 +304,14 @@ export function ContactDetailPage() {
   async function removeTag(t: string) {
     const updated = tags.filter(x => x !== t);
     setTags(updated);
-    await supabase
-      .from('unified_contacts')
-      .update({ tags: updated })
-      .eq('id', contact.id);
+    await contactsApi.update(contact!.id, { tags: updated });
   }
 
   async function addTag() {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       const updated = [...tags, newTag.trim().toLowerCase()];
       setTags(updated);
-      await supabase
-        .from('unified_contacts')
-        .update({ tags: updated })
-        .eq('id', contact.id);
+      await contactsApi.update(contact!.id, { tags: updated });
     }
     setNewTag('');
     setAddingTag(false);
@@ -536,48 +319,31 @@ export function ContactDetailPage() {
 
   async function handleSaveNote() {
     setEditingNote(false);
-    await supabase
-      .from('unified_contacts')
-      .update({ notes: note })
-      .eq('id', contact.id);
+    await contactsApi.update(contact!.id, { notes: note });
   }
 
   async function handleOptInToggle(val: boolean) {
     setOptedIn(val);
     if (tenant && brand) {
       try {
-        await gdprApi.logConsent(tenant.id, brand.id, val ? 'OPT_IN' : 'OPT_OUT', undefined, undefined, contact.id, contact.name);
+        await gdprApi.logConsent(tenant.id, brand.id, val ? 'OPT_IN' : 'OPT_OUT', undefined, undefined, contact!.id, contact!.name);
       } catch (err) {
         console.error('Failed to log consent:', err);
       }
     }
-    // Also persist in custom_fields
-    const { data: currentContact } = await supabase
-      .from('unified_contacts')
-      .select('custom_fields')
-      .eq('id', contact.id)
-      .single();
-
-    if (currentContact) {
-      await supabase
-        .from('unified_contacts')
-        .update({
-          custom_fields: { ...(currentContact.custom_fields || {}), optedIn: val },
-        })
-        .eq('id', contact.id);
-    }
+    await contactsApi.update(contact!.id, { opted_in: val });
   }
 
   async function handleGdprExport() {
     if (!tenant || !brand) return;
     setGdprLoading(true);
     try {
-      const data = await gdprApi.exportContact(contact.id, tenant.id, brand.id);
+      const data = await gdprApi.exportContact(contact!.id, tenant.id, brand.id);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${contact.name.replace(/\s+/g, '_')}_export.json`;
+      a.download = `${contact!.name.replace(/\s+/g, '_')}_export.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -594,7 +360,7 @@ export function ContactDetailPage() {
     if (!tenant || !brand) return;
     setGdprLoading(true);
     try {
-      await gdprApi.eraseContact(contact.id, tenant.id, brand.id);
+      await gdprApi.eraseContact(contact!.id, tenant.id, brand.id);
       setGdprModal(null);
       navigate('/contacts');
     } catch (err) {

@@ -7,8 +7,7 @@ import {
 import { Card, MetricCard, Tabs, Badge, Button, Skeleton } from '../components/ui';
 import { TrendingUp, Brain, DollarSign, Zap, GitBranch, Download, ArrowUpRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { attributionApi } from '../lib/api';
-import { supabase } from '../lib/supabase';
+import { attributionApi, flowsApi } from '../lib/api';
 
 // ---- Fallback data used only while live data is loading ----
 const EMPTY_AREA: { day: string; instagram: number; facebook: number; tiktok: number; revenue: number }[] = [];
@@ -101,27 +100,13 @@ export function AnalyticsPage() {
       // 1. Fetch attribution analytics from the edge function
       const analytics = await attributionApi.analytics(tenant.id, brand.id, days);
 
-      // 2. Fetch flow performance from Supabase
-      const { data: flows } = await supabase
-        .from('flows')
-        .select('id, name, triggered_count, conversion_count, revenue_attributed, ghost_variant_id, ghost_traffic_pct, status')
-        .eq('tenant_id', tenant.id)
-        .eq('brand_id', brand.id);
+      // 2. Fetch flow performance via API
+      const flowsRaw = await flowsApi.list(brand.id).catch(() => []);
+      const flows: any[] = Array.isArray(flowsRaw) ? flowsRaw : [];
 
-      // 3. Fetch AI audit logs from Supabase
-      const { data: aiLogs } = await supabase
-        .from('ai_audit_logs')
-        .select('id, model_tier, estimated_cost_usd, intent_classified, created_at')
-        .eq('tenant_id', tenant.id)
-        .gte('created_at', since);
-
-      // 4. Fetch attribution events from Supabase
-      const { data: attrEvents } = await supabase
-        .from('attribution_events')
-        .select('id, event_type, platform, revenue_attributed, created_at')
-        .eq('tenant_id', tenant.id)
-        .eq('brand_id', brand.id)
-        .gte('created_at', since);
+      // 3 & 4. AI audit logs and attribution events — served via API in a future iteration
+      const aiLogs: any[] = [];
+      const attrEvents: any[] = [];
 
       // ---- Process attribution analytics response ----
       const overview = analytics?.overview || {};

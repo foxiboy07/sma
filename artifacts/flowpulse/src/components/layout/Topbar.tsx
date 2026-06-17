@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Search, Bell, HelpCircle, ChevronDown, User, LogOut, Keyboard, Settings, Sparkles, X, Check, ExternalLink, Menu } from 'lucide-react';
 import { Dropdown } from '../ui';
 import { useAuth } from '../../hooks/useAuth';
-import { supabase } from '../../lib/supabase';
 import { realtimeApi } from '../../lib/api';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -28,48 +27,13 @@ export function Topbar({ onCommandPalette, onMenuClick }: TopbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Fetch notifications
+  // Notifications will be served via API in a future iteration
   useEffect(() => {
-    if (!tenant?.id) return;
-
-    async function fetchNotifications() {
-      const { data } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (data) {
-        setNotifications(data as Notification[]);
-        setUnreadCount(data.filter(n => !n.is_read).length);
-      }
-    }
-
-    fetchNotifications();
-
-    // Subscribe to new notifications
-    const channel = supabase
-      .channel('topbar-notifications')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `tenant_id=eq.${tenant.id}`,
-      }, (payload) => {
-        setNotifications(prev => [payload.new as Notification, ...prev.slice(0, 19)]);
-        setUnreadCount(prev => prev + 1);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    setNotifications([]);
+    setUnreadCount(0);
   }, [tenant?.id]);
 
-  // Mark notification as read
   async function markAsRead(id: string) {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     setUnreadCount(prev => Math.max(0, prev - 1));
   }
@@ -77,7 +41,7 @@ export function Topbar({ onCommandPalette, onMenuClick }: TopbarProps) {
   // Mark all as read
   async function markAllAsRead() {
     if (!tenant?.id) return;
-    await realtimeApi.markAllRead(tenant.id, user?.id);
+    await realtimeApi.markAllRead();
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     setUnreadCount(0);
   }
@@ -122,7 +86,7 @@ export function Topbar({ onCommandPalette, onMenuClick }: TopbarProps) {
             }
             items={[
               { label: brand.name, icon: <div className="w-4 h-4 rounded bg-blue-500" /> },
-              { divider: true },
+              { divider: true, label: '' },
               { label: '+ Add Brand', onClick: () => {} },
             ]}
             align="left"
@@ -264,7 +228,7 @@ export function Topbar({ onCommandPalette, onMenuClick }: TopbarProps) {
             { label: user?.email || 'Account', icon: <User className="w-4 h-4" /> },
             { label: 'Settings', icon: <Settings className="w-4 h-4" />, onClick: () => {} },
             { label: 'Keyboard shortcuts', icon: <Keyboard className="w-4 h-4" />, onClick: () => {} },
-            { divider: true },
+            { divider: true, label: '' },
             { label: 'Sign out', icon: <LogOut className="w-4 h-4" />, onClick: signOut, danger: true },
           ]}
         />

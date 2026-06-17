@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw, Link2, Clock, Activity, Zap, Shield, AlertTriangle, CheckCircle2, ExternalLink, Plus } from 'lucide-react';
 import { Button, Badge, Card, MetricCard, CircuitBadge, PlatformIcon, Modal, Input } from '../components/ui';
 import { formatDistanceToNow, addHours, format } from 'date-fns';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { tokenVaultApi, oauthApi } from '../lib/api';
+import { tokenVaultApi, oauthApi, connectedAccountsApi } from '../lib/api';
 
 interface AccountDisplay {
   id: string;
@@ -36,27 +35,16 @@ export function TokenHealthPage() {
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!tenant) return;
-    async function loadAccounts() {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('connected_accounts')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .order('platform');
-
-      if (error) {
-        console.error('Failed to load connected accounts:', error);
-        setLoading(false);
-        return;
-      }
-
-      const mapped: AccountDisplay[] = (data || []).map(row => {
+  async function loadAccounts() {
+    if (!brand) return;
+    setLoading(true);
+    try {
+      const data = await connectedAccountsApi.list(brand.id);
+      const rows: any[] = Array.isArray(data) ? data : [];
+      const mapped: AccountDisplay[] = rows.map((row: any) => {
         const required = REQUIRED_SCOPES[row.platform as keyof typeof REQUIRED_SCOPES] || [];
         const granted = row.granted_scopes || [];
-        const missing = required.filter(s => !granted.includes(s));
-
+        const missing = required.filter((s: string) => !granted.includes(s));
         return {
           id: row.id,
           platform: row.platform,
@@ -73,12 +61,18 @@ export function TokenHealthPage() {
           refresh_history: [],
         };
       });
-
       setAccounts(mapped);
+    } catch (err) {
+      console.error('Failed to load connected accounts:', err);
+    } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    if (!brand) return;
     loadAccounts();
-  }, [tenant]);
+  }, [brand?.id]);
 
   const healthy = accounts.filter(a => a.health_status === 'HEALTHY').length;
   const expiring = accounts.filter(a => a.health_status === 'EXPIRING').length;
@@ -88,37 +82,7 @@ export function TokenHealthPage() {
     setRefreshing(id);
     try {
       await tokenVaultApi.forceRefresh(id);
-      // Re-fetch accounts to reflect updated state
-      if (tenant) {
-        const { data } = await supabase
-          .from('connected_accounts')
-          .select('*')
-          .eq('tenant_id', tenant.id)
-          .order('platform');
-        if (data) {
-          const mapped: AccountDisplay[] = data.map(row => {
-            const required = REQUIRED_SCOPES[row.platform as keyof typeof REQUIRED_SCOPES] || [];
-            const granted = row.granted_scopes || [];
-            const missing = required.filter(s => !granted.includes(s));
-            return {
-              id: row.id,
-              platform: row.platform,
-              username: row.platform_username || row.platform_account_id,
-              health_status: row.health_status || 'HEALTHY',
-              last_refresh_at: row.last_refresh_at || new Date().toISOString(),
-              token_expires_at: row.token_expires_at || new Date().toISOString(),
-              last_webhook_at: row.last_webhook_at || new Date().toISOString(),
-              circuit_state: row.circuit_state || 'CLOSED',
-              failure_rate: row.failure_count ?? 0,
-              rate_limit_pct: 0,
-              granted_scopes: granted,
-              missing_scopes: missing,
-              refresh_history: [],
-            };
-          });
-          setAccounts(mapped);
-        }
-      }
+      await loadAccounts();
     } catch (err) {
       console.error('Force refresh failed:', err);
     } finally {

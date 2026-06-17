@@ -76,7 +76,6 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.108.2",
     "react-router-dom": "^7.17.0",
     "reactflow": "^11.11.4"
   }

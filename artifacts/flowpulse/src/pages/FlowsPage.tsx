@@ -379,7 +379,7 @@ function FlowCard({ flow, onToggle, onEdit, onDuplicate, onArchive, duplicating,
               icon: flow.status === 'ACTIVE' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />,
               onClick: () => onToggle(flow.id),
             }] : []),
-            { divider: true },
+            { divider: true, label: '' },
             ...(!isArchived ? [{
               label: archiving ? 'Archiving...' : 'Archive',
               icon: <Archive className="w-3.5 h-3.5" />,

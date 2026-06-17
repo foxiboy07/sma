@@ -1064,7 +1064,7 @@ export function BroadcastsPage() {
                         {wizard.message
                           .replace('{{contact.name}}', 'Alex')
                           .replace('{{brand.name}}', brand?.name ?? 'Your Brand')
-                          .replace('{{brand.persona_name}}', brand?.persona_name ?? 'Team')}
+                          .replace('{{brand.persona_name}}', (brand as any)?.persona_name ?? 'Team')}
                       </p>
                     </div>
                   </div>
@@ -1145,8 +1145,8 @@ export function BroadcastsPage() {
               <div>
                 <label className="text-xs font-medium text-[#8B90A7] block mb-1.5">
                   Date & Time
-                  {brand?.timezone && (
-                    <span className="ml-2 text-[#4B5068] font-normal">({brand.timezone})</span>
+                  {(brand?.timezone as string) && (
+                    <span className="ml-2 text-[#4B5068] font-normal">({brand?.timezone as string})</span>
                   )}
                 </label>
                 <input

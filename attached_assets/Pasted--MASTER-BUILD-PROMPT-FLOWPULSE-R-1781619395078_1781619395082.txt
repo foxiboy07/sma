@@ -1,0 +1,1279 @@
+================================================================
+MASTER BUILD PROMPT — FLOWPULSE
+Role: Senior Full-Stack SaaS Architect & Lead Engineer
+Stack: Next.js 14 (App Router) · Node.js/Go Ingressor · PostgreSQL + Citus
+       Redis Cluster · ClickHouse · SQS/Kafka · AWS Lambda · WebSockets
+       React Flow · Yjs · AWS KMS · V8 Isolates
+================================================================
+
+PRODUCT VISION
+==============
+Build "FlowPulse" — a multi-channel DM automation and CRM platform that
+competes directly with ManyChat, Tidio, and Intercom. It handles Instagram,
+Facebook, TikTok, and TikTok Shop. It supports millions of real-time
+webhook triggers, a visual no-code flow builder, an AI agent layer, and a
+unified omni-channel CRM inbox. The architecture must be enterprise-grade,
+compliant with Meta and TikTok 2026 developer policies, and production-ready
+from day one.
+
+You are building this in Replit. Use the full Replit environment: Node.js
+for the API layer, Python where needed for ML, PostgreSQL and Redis via
+Replit DB or external managed instances, and deploy with Replit Deployments.
+Every feature below must be production-ready, not a mock or a placeholder.
+
+================================================================
+SECTION 0 — CRITICAL EXTERNAL CONSTRAINTS (READ FIRST)
+================================================================
+
+0.1  Meta App Review is mandatory for Advanced Access (instagram_manage_messages,
+     instagram_manage_comments, pages_messaging). The platform uses a single
+     "Parent App" that holds all Advanced Access. End-users onboard via Meta
+     Business Extension (MBE) / Embedded Signup — they never submit their
+     own App Review. This is the #1 architectural requirement.
+
+0.2  TikTok 2026 policy: only "inbound-only" triggers are permitted. The
+     platform MUST NEVER initiate mass comments, auto-follow, or any
+     proactive outbox action not triggered by a user interaction. Violating
+     this causes permanent API bans.
+
+0.3  The Meta 24-Hour Messaging Window is law. Any message sent >24h after
+     the last user interaction without a permitted Message Tag
+     (POST_PURCHASE_UPDATE, CONFIRMED_EVENT_UPDATE, etc.) will get the
+     platform's App ID flagged. Every outgoing message must pass the
+     24-Hour Validator before dispatch.
+
+0.4  Token security: OAuth access_tokens and refresh_tokens must NEVER be
+     stored in plain text. All tokens are encrypted at rest using AWS KMS
+     (envelope encryption: AES-256-GCM data key, encrypted by KMS master key).
+
+0.5  Data residency: EU webhook data must never physically leave the EU
+     (eu-central-1). US data stays in us-east-1. Use AWS Route 53 or
+     Cloudflare Workers for geo-routing. PostgreSQL uses Citus geo-partitions.
+
+================================================================
+SECTION 1 — DATABASE SCHEMA (Build this first)
+================================================================
+
+Use PostgreSQL with Row-Level Security (RLS) enabled on every tenant table.
+Enable the Citus extension for horizontal sharding by tenant_id.
+Enable the TimescaleDB extension for time-series hypertables.
+
+1.1 CORE TABLES
+
+tenants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  plan ENUM('FREE','PRO','LEGEND') NOT NULL DEFAULT 'FREE',
+  stripe_customer_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+brands (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  logo_url TEXT,
+  timezone TEXT DEFAULT 'UTC',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+connected_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+  platform ENUM('INSTAGRAM','FACEBOOK','TIKTOK') NOT NULL,
+  platform_account_id TEXT NOT NULL,
+  platform_username TEXT,
+  encrypted_access_token BYTEA NOT NULL,
+  encrypted_refresh_token BYTEA,
+  encrypted_data_key BYTEA NOT NULL,
+  token_expires_at TIMESTAMPTZ,
+  last_refresh_at TIMESTAMPTZ,
+  health_status ENUM('HEALTHY','EXPIRING','BROKEN') DEFAULT 'HEALTHY',
+  granted_scopes TEXT[] DEFAULT '{}',
+  last_webhook_at TIMESTAMPTZ,
+  circuit_state ENUM('CLOSED','OPEN','HALF_OPEN') DEFAULT 'CLOSED',
+  circuit_tripped_at TIMESTAMPTZ,
+  failure_count INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+unified_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  display_name TEXT,
+  email TEXT,
+  phone TEXT,
+  loyalty_score INT DEFAULT 0 CHECK (loyalty_score BETWEEN 0 AND 100),
+  loyalty_tier ENUM('NEWBIE','FAN','ADVOCATE') DEFAULT 'NEWBIE',
+  tags TEXT[] DEFAULT '{}',
+  custom_fields JSONB DEFAULT '{}',
+  zero_party_signals JSONB DEFAULT '{}',
+  sentiment_score DECIMAL(4,3) DEFAULT 0,
+  gdpr_deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+platform_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  unified_contact_id UUID NOT NULL REFERENCES unified_contacts(id),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  platform ENUM('INSTAGRAM','FACEBOOK','TIKTOK') NOT NULL,
+  platform_user_id TEXT NOT NULL,
+  platform_username TEXT,
+  last_interaction_at TIMESTAMPTZ,
+  UNIQUE(platform, platform_user_id, brand_id)
+);
+
+identity_match_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  contact_a_id UUID REFERENCES unified_contacts(id),
+  contact_b_id UUID REFERENCES unified_contacts(id),
+  match_score DECIMAL(4,3) NOT NULL,
+  match_method ENUM('EXACT_EMAIL','EXACT_PHONE','FUZZY_NAME') NOT NULL,
+  status ENUM('PENDING','MERGED','DISMISSED') DEFAULT 'PENDING',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+flows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  status ENUM('DRAFT','ACTIVE','PAUSED','ARCHIVED') DEFAULT 'DRAFT',
+  trigger_type ENUM('COMMENT_TO_DM','STORY_MENTION','STORY_REPLY',
+    'FOLLOW_TO_DM','SHARE_TO_DM','TIKTOK_COMMENT_TO_DM',
+    'TIKTOK_SHOP_COMMENT','DEEPLINK_BIO_CLICK','MANUAL') NOT NULL,
+  trigger_config JSONB DEFAULT '{}',
+  yjs_state BYTEA,
+  ghost_variant_id UUID REFERENCES flows(id),
+  ghost_traffic_pct INT DEFAULT 0 CHECK (ghost_traffic_pct BETWEEN 0 AND 100),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+flow_nodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  flow_id UUID NOT NULL REFERENCES flows(id) ON DELETE CASCADE,
+  tenant_id UUID NOT NULL,
+  node_type ENUM('TRIGGER','SEND_MESSAGE','SEND_DM_CARD','AI_STEP',
+    'ACTION_BLOCK','CUSTOM_CODE','CONDITION','SUPER_RANDOMIZER',
+    'SMART_DELAY','FRICTION_RECOVERY','TIKTOK_SHOP_PRODUCT',
+    'OUTBOUND_WEBHOOK') NOT NULL,
+  config JSONB NOT NULL DEFAULT '{}',
+  position_x DECIMAL NOT NULL DEFAULT 0,
+  position_y DECIMAL NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+flow_edges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  flow_id UUID NOT NULL REFERENCES flows(id) ON DELETE CASCADE,
+  tenant_id UUID NOT NULL,
+  source_node_id UUID NOT NULL REFERENCES flow_nodes(id) ON DELETE CASCADE,
+  target_node_id UUID NOT NULL REFERENCES flow_nodes(id) ON DELETE CASCADE,
+  edge_label TEXT,
+  condition_config JSONB DEFAULT '{}'
+);
+
+conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  unified_contact_id UUID NOT NULL REFERENCES unified_contacts(id),
+  platform ENUM('INSTAGRAM','FACEBOOK','TIKTOK') NOT NULL,
+  platform_conversation_id TEXT,
+  status ENUM('BOT','HUMAN','CLOSED') DEFAULT 'BOT',
+  assigned_agent_id UUID,
+  last_message_at TIMESTAMPTZ,
+  sentiment_score DECIMAL(4,3) DEFAULT 0,
+  priority_red BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id),
+  tenant_id UUID NOT NULL,
+  direction ENUM('INBOUND','OUTBOUND') NOT NULL,
+  content TEXT,
+  message_type ENUM('TEXT','DM_CARD','PRODUCT_CARD','SYSTEM') DEFAULT 'TEXT',
+  platform_message_id TEXT,
+  delivery_status ENUM('QUEUED','SENT','DELIVERED','FAILED') DEFAULT 'QUEUED',
+  is_ai_generated BOOLEAN DEFAULT FALSE,
+  ai_tier_used ENUM('TIER_1','TIER_2'),
+  ai_token_cost INT DEFAULT 0,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+kb_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  source_type ENUM('PDF','URL') NOT NULL,
+  source_url TEXT,
+  index_status ENUM('PENDING','INDEXED','FAILED') DEFAULT 'PENDING',
+  chunk_count INT DEFAULT 0,
+  strictness ENUM('STRICT','BALANCED','CREATIVE') DEFAULT 'BALANCED',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+attribution_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  unified_contact_id UUID,
+  flow_id UUID,
+  node_id UUID,
+  event_type ENUM('FLOW_TRIGGERED','MESSAGE_SENT','LINK_CLICKED',
+    'PURCHASE_ATTRIBUTED','INTENT_CLASSIFIED','AI_RESPONSE_SENT',
+    'HUMAN_HANDOFF','BIO_CLICK','CAPI_FIRED') NOT NULL,
+  platform TEXT,
+  revenue_attributed DECIMAL(10,2) DEFAULT 0,
+  identity_token TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- Convert to TimescaleDB hypertable:
+SELECT create_hypertable('attribution_events', 'created_at');
+
+short_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  brand_id UUID NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  destination_url TEXT NOT NULL,
+  identity_token TEXT NOT NULL,
+  contact_id UUID REFERENCES unified_contacts(id),
+  flow_id UUID,
+  click_count INT DEFAULT 0,
+  custom_domain TEXT,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+webhook_raw_vault (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  platform ENUM('INSTAGRAM','FACEBOOK','TIKTOK') NOT NULL,
+  delivery_id TEXT UNIQUE NOT NULL,
+  s3_path TEXT NOT NULL,
+  received_at TIMESTAMPTZ DEFAULT NOW(),
+  is_processed BOOLEAN DEFAULT FALSE,
+  is_replay BOOLEAN DEFAULT FALSE
+);
+
+flow_audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  tenant_id UUID NOT NULL,
+  flow_id UUID NOT NULL,
+  user_id UUID NOT NULL,
+  operation_type VARCHAR(50) NOT NULL,
+  payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ai_audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  conversation_id UUID,
+  contact_id UUID,
+  flow_id UUID,
+  model_tier ENUM('TIER_1','TIER_2') NOT NULL,
+  prompt_text TEXT NOT NULL,
+  kb_chunks_retrieved JSONB DEFAULT '[]',
+  function_calls JSONB DEFAULT '[]',
+  response_text TEXT NOT NULL,
+  token_count INT DEFAULT 0,
+  estimated_cost_usd DECIMAL(8,6) DEFAULT 0,
+  similarity_scores JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+token_decryption_audit (
+  id BIGSERIAL PRIMARY KEY,
+  connected_account_id UUID NOT NULL,
+  calling_service TEXT NOT NULL,
+  decrypted_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+1.2 ROW-LEVEL SECURITY
+
+-- Enable on ALL tenant tables:
+ALTER TABLE brands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connected_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE unified_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flow_nodes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flow_edges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kb_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attribution_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE short_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Apply policy on each (example for unified_contacts):
+CREATE POLICY tenant_isolation ON unified_contacts
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+-- In your DB connection pool (every connection must set this):
+SET app.current_tenant_id = '<tenant_uuid>';
+
+-- Unit test requirement: verify Tenant A session returns ZERO rows
+-- from Tenant B's data even with SELECT * with no WHERE clause.
+
+================================================================
+SECTION 2 — WEBHOOK INGRESSOR (Build second)
+================================================================
+
+Build in Node.js (or Go for higher throughput). This is a stateless,
+ultra-lightweight service whose ONLY job is:
+
+2.1 INGRESSOR LOGIC (must complete in < 50ms total)
+
+  Step 1: Receive POST /webhook/meta or POST /webhook/tiktok
+  Step 2: Validate HMAC signature
+    Meta: X-Hub-Signature-256 header, SHA-256 HMAC of raw body with
+          app_secret. Reject with 403 if invalid.
+    TikTok: validate per TikTok's 2026 webhook signing spec.
+  Step 3: Extract delivery_id (Meta) or message_id (TikTok) from payload
+  Step 4: Redis SETNX with key = SHA256(delivery_id), TTL = 86400s
+    If SETNX returns 0: DUPLICATE — return 200 OK immediately, stop.
+  Step 5: Write raw encrypted payload to S3 synchronously:
+    Path: s3://flowpulse-webhook-vault/{tenant_id}/{YYYY}/{MM}/{DD}/{HH}/{delivery_id}.json
+    Encrypt with AES-256-GCM before upload.
+    S3 lifecycle: Standard 14d → Glacier Instant 15-30d → Purge day 31
+    (configurable per brand up to 90 days)
+  Step 6: Drop validated payload into Amazon SQS queue
+  Step 7: Return 200 OK
+
+  Do NOT process business logic here.
+  Do NOT call Meta/TikTok APIs here.
+  Do NOT open DB connections here.
+  Target: handle 50,000 concurrent webhooks in 3 seconds without dropping one.
+  Use Provisioned Concurrency (Lambda) or a persistent Node.js cluster.
+
+2.2 SQS CONFIGURATION
+  - Visibility timeout: 30 seconds
+  - Max receive count: 3
+  - Dead Letter Queue (DLQ) attached
+  - DLQ retention: 14 days
+
+2.3 LAMBDA WORKER (Tier 2 processor)
+  Pulls from SQS at a controlled rate matching DB write capacity.
+  Processing pipeline per message:
+    a. Check 24-Hour Window (Section 4)
+    b. Check circuit breaker state (Section 7)
+    c. Check global contact session in Redis (Section 8)
+    d. Route to correct flow engine
+    e. Execute flow nodes
+    f. Call Meta/TikTok outbound APIs with rate-limit token bucket
+
+  Lambda configuration:
+    - Reserved concurrency: 100 (prevents DB pool exhaustion)
+    - Use RDS Proxy (PgBouncer) — NEVER open direct Postgres connections from Lambda
+    - Provisioned concurrency for Ingressor function only
+
+================================================================
+SECTION 3 — TOKEN VAULT & AUTO-REFRESH ENGINE
+================================================================
+
+3.1 ENCRYPTION FLOW (AWS KMS envelope encryption)
+  Store:
+    1. Call KMS GenerateDataKey (AES-256)
+    2. Encrypt token with data key (AES-256-GCM, 12-byte IV, 16-byte tag)
+    3. Store: encrypted_access_token, encrypted_data_key, IV+tag in DB column
+    4. Discard plaintext data key immediately
+
+  Retrieve:
+    1. Fetch encrypted_access_token + encrypted_data_key from DB
+    2. Call KMS Decrypt to get plaintext data key
+    3. Decrypt token in-memory using data key
+    4. Use token for API call
+    5. Zero-out plaintext token variable immediately after use
+    6. Write to token_decryption_audit table
+
+  Key rotation: quarterly via KMS automatic key rotation.
+  Every KMS decrypt call logged to AWS CloudTrail.
+
+3.2 AUTO-REFRESH CRON (runs every hour)
+  For every connected_account where token_expires_at < NOW() + 48h:
+    a. Attempt token refresh using platform refresh endpoint
+    b. If success: re-encrypt new token (Section 3.1), update DB,
+       emit WebSocket event account.token_refreshed
+    c. If fail: set health_status = 'BROKEN', emit WebSocket event
+       account.token_broken, send push notification (FCM/APNs) to
+       tenant owner, send in-app alert, update Token Health Panel
+
+  Gate: before EVERY outgoing API call, verify token_expires_at > NOW().
+  Never allow a flow to execute with an expired token.
+
+================================================================
+SECTION 4 — 24-HOUR MESSAGING WINDOW VALIDATOR
+================================================================
+
+4.1 IMPLEMENTATION
+  Before any message is dequeued and dispatched:
+
+  last_ts = platform_profiles.last_interaction_at for the recipient
+  delta_t = NOW() - last_ts
+
+  If delta_t < 23.5 hours:
+    → Allow full marketing message. Proceed normally.
+
+  If 23.5h ≤ delta_t ≤ 24.0h:
+    → Strip all marketing text. Send lightweight text-only message.
+    → Append permitted Message Tag to API payload.
+    → Log as "NEAR_WINDOW_EXPIRY"
+
+  If delta_t > 24.0h AND flow node has a permitted Message Tag:
+    → Allow message with that tag. Attach tag to API payload.
+
+  If delta_t > 24.0h AND no permitted tag:
+    → BLOCK message entirely.
+    → Log "24H_WINDOW_EXPIRED" event to DLQ dashboard.
+    → If brand has SMS/email fallback configured: fire fallback.
+    → Do NOT send to Meta/TikTok.
+
+  Use the webhook event's own timestamp field — NOT database insertion time.
+
+4.2 SMART DELAY WARNING IN BUILDER
+  When a user configures a Smart Delay node in the flow builder, calculate
+  if the delay could push any recipient past the 24h window.
+  If yes: show a red warning badge on the node + inline suggestion to
+  add a permitted Message Tag to the downstream message node.
+
+================================================================
+SECTION 5 — OAUTH & ONBOARDING SYSTEM
+================================================================
+
+5.1 META BUSINESS EXTENSION (MBE) FLOW
+  The parent app has Advanced Access for all required scopes.
+  Sub-tenants authenticate via MBE / Embedded Signup popup.
+  They click "Connect" → Meta MBE popup → grants access to parent app.
+  Platform receives a page access token via MBE callback.
+  Never ask end-users to submit their own App Review.
+
+  Required scopes for Meta:
+    instagram_manage_messages, instagram_manage_comments,
+    pages_manage_metadata, pages_messaging,
+    instagram_basic, business_management,
+    pages_read_engagement, pages_manage_engagement
+
+5.2 TIKTOK BUSINESS LOGIN FLOW
+  Use TikTok Business Login SDK.
+  Required scopes (2026): dm.send, comment.list, comment.reply,
+    user.info.basic, business.account.info
+
+5.3 PRE-FLIGHT WIZARD (A3 in UI section)
+  Step 1: Detect account type
+    TikTok: call /v2/user/info/ → check account_type field.
+    If account_type !== 'Business': block flow creation, show upgrade prompt.
+    Facebook: verify the page is a Business Page, not personal.
+
+  Step 2: Scope verification
+    async function verifyTenantScopes(accessToken, pageId) {
+      const res = await fetch(
+        `https://graph.facebook.com/v19.0/${pageId}/permissions`
+        + `?access_token=${accessToken}`
+      );
+      const data = await res.json();
+      const active = data.data
+        .filter(p => p.status === 'granted')
+        .map(p => p.permission);
+      const required = [
+        'instagram_manage_messages','instagram_manage_comments',
+        'pages_manage_metadata','pages_messaging'
+      ];
+      const missing = required.filter(s => !active.includes(s));
+      return { compliant: missing.length === 0, missing, active };
+    }
+
+  Step 3: Display granted vs missing scopes with Fix-It deeplinks
+    to Meta Developer Console.
+
+  Step 4: Send a test webhook ping to confirm live connection.
+
+5.4 PERMISSION SCRAPER CRON (runs every 6 hours)
+  For every connected_account:
+    a. Call /me/permissions (Meta) or TikTok scope endpoint
+    b. Compare granted scopes to scopes required by all ACTIVE flows
+    c. If mismatch: flag affected flows status = 'PAUSED' with reason
+       'MISSING_SCOPE', send in-app alert, update Permission Health Dashboard
+    d. Log scope change history for compliance audit
+
+================================================================
+SECTION 6 — VISUAL FLOW BUILDER FRONTEND
+================================================================
+
+6.1 TECH STACK
+  Use React Flow for the canvas. State synced via Yjs CRDTs over
+  WebSockets (AWS API Gateway WebSockets or Pusher).
+  Host on Next.js 14 App Router.
+
+6.2 NODE TYPES TO IMPLEMENT
+
+  TRIGGER NODES:
+    - Comment-to-DM (keyword list + semantic matching toggle)
+    - Story Mention / Story Reply
+    - Follow-to-DM
+    - Share-to-DM (Reel shared to Story triggers reward)
+    - TikTok Comment-to-DM (inbound-only, intent-based)
+    - TikTok Shop Livestream Comment (product intent trigger)
+    - Bio Deeplink Click (server-side attribution)
+
+  ACTION NODES:
+    - Send Message (text, image, video, audio)
+    - Send DM Card (button + CTA)
+    - TikTok Shop Product Card (live inventory + price via TikTok Shop API)
+    - Outbound Webhook (Legend tier)
+
+  LOGIC NODES:
+    - Condition / Split (if/else on contact fields, tags, platform, intent)
+    - Super Randomizer (2–12 paths, configurable % weights, must sum 100%)
+    - Smart Delay (mins/hrs/days/specific time, timezone selector, 24h warning)
+
+  AI NODES:
+    - AI Step (KB selector, strictness, fallback state, function call targets)
+    - Friction Recovery (auto-activates on double-failure or sentiment < -0.7)
+
+  INTEGRATION NODES:
+    - Action Block (Shopify order lookup, Calendly booking, custom HTTP)
+    - Custom Code Block (Monaco editor, V8 isolate, Legend tier only)
+
+6.3 CANVAS FEATURES
+  - Drag, drop, connect via bezier edges, delete, duplicate nodes
+  - Zoom (ctrl+scroll), pan, snap-to-grid (16px grid)
+  - Mini-map in bottom-right corner
+  - Undo/redo (Yjs history)
+  - Export flow as JSON
+  - Flow validation: warn if a node has no outgoing edge, if Smart Delay
+    risks 24h window, if a required field is empty
+
+6.4 MULTIPLAYER (Figma-style)
+  - Show live cursor positions and user avatars for all active editors
+  - "X is editing this node" tooltip on hover
+  - CRDT conflict resolution via Yjs (deterministic, no server arbitration)
+  - Structural deletion always wins over concurrent mutations
+  - Show "Conflict resolved" toast notification on merge
+  - Persist Yjs document: latest state in Redis (fast reload),
+    periodic snapshots in PostgreSQL flows.yjs_state
+
+6.5 SUPER RANDOMIZER SPECIFICS
+  - Enforce: all path percentages must sum to exactly 100%
+  - Show live conversion rate per path (small bar under each branch)
+    once flow has 100+ executions
+  - "Pick Winner" button: routes 100% traffic to best-converting path
+  - Data source: ClickHouse attribution_events
+
+================================================================
+SECTION 7 — CIRCUIT BREAKER & RATE LIMIT CONTROLLER
+================================================================
+
+7.1 CIRCUIT BREAKER (per connected_account)
+  Track in Redis: {tenant_id}:{brand_id}:circuit:{account_id}
+  State object: { state, tripped_at, failure_count, probe_at }
+
+  Window: rolling 60-second failure rate per account.
+
+  CLOSED state (normal):
+    success → reset failure_count
+    failure → increment failure_count
+    if failure_rate > 15% over 60s → OPEN
+
+  OPEN state (tripped):
+    ALL outgoing messages for this account: BLOCKED
+    Emit: WebSocket account.circuit_open event
+    Send: push notification + in-app alert to tenant owner
+    Log: reason, failed messages count, timestamp
+    After 5 minutes → HALF_OPEN
+
+  HALF_OPEN state:
+    Allow 1 probe message
+    If success → CLOSED, reset counters
+    If fail → OPEN again with exponential backoff (5m → 10m → 20m)
+
+7.2 RATE LIMIT TOKEN BUCKET (per connected_account, in Redis)
+  Sliding window counter tracks messages sent per second and per hour.
+  Meta limits: 250 conversations/second (tier-dependent per page)
+  TikTok limits: per TikTok 2026 API docs
+
+  At 80% of limit: emit "Rate Limit Approaching" event to UI dashboard
+  At 100%: re-enqueue message with delay using SQS DelaySeconds
+  Never drop messages due to rate limits — only delay them.
+
+  TikTok sliding window: if outbound actions cross 85% of TikTok's
+  standard rate within 60s: shift profile flow into cooling phase,
+  log queue retries with exponential backoff.
+
+7.3 DEAD LETTER QUEUE + INTELLIGENT REPLAY
+  Messages failing 3 processing attempts → DLQ with error metadata.
+  Cron runs every 15 minutes:
+    a. Ping health endpoints for failing 3rd-party APIs (Shopify/Meta/TikTok)
+    b. On recovery: auto-replay DLQ with exponential backoff
+       (1min delay → 4min → 16min)
+  Replay flag: add is_replay=true to message — bypasses dedup layer.
+  DLQ visible in DLQ Replay Dashboard (Section 14).
+
+================================================================
+SECTION 8 — GLOBAL OMNI-CHANNEL STATE MACHINE
+================================================================
+
+8.1 ACTIVE SESSION STORE (Redis)
+  Key: {tenant_id}:{brand_id}:session:{unified_contact_id}
+  Value: {
+    contact_id, platform, flow_id, node_id,
+    entered_at, next_action_at, loyalty_score
+  }
+  TTL: 24 hours (refreshed on every interaction)
+
+8.2 SESSION CHECK BEFORE TRIGGER
+  When a new trigger arrives for a contact:
+    a. Check if active session exists for this unified_contact_id
+    b. If no session: start new flow normally
+    c. If session exists on SAME platform: continue existing flow
+    d. If session exists on DIFFERENT platform:
+       Option A (default): queue new trigger, process after current flow
+       Option B (configurable per flow): merge context and continue
+    e. This prevents two flows spamming the same user simultaneously
+       from Instagram and TikTok at the same time.
+
+8.3 LOYALTY PREFETCH
+  When a contact's cross-platform activity creates a session:
+    a. Compute loyalty_score from signal aggregation (Section 11)
+    b. If score > 67 (Advocate): pre-load the Advocate message sequence
+       into Redis cache so first DM response is instantaneous
+    c. If score > 33 (Fan): pre-load Fan sequence
+    d. Inject cross-platform context into AI prompt (Section 10)
+
+================================================================
+SECTION 9 — AI LAYER
+================================================================
+
+9.1 INTENT RECOGNITION ENGINE (runs on EVERY inbound message)
+  Use Tier 1 model (fast, cheap) for classification.
+  Output: intent bucket + confidence score (0.0–1.0)
+
+  Built-in intent buckets:
+    BUY_INTENT, REFUND_REQUEST, PRICE_CHECK, GENERAL_QUESTION,
+    COMPLAINT, GREETING, UNSUBSCRIBE, LINK_REQUEST, OTHER
+
+  Custom intents: tenants can define additional keyword + semantic labels.
+  Intent stored as contact event in attribution_events table.
+  Intent used for: flow branching, LLM tier routing, handoff triggers,
+  Ghost A/B tracking.
+
+9.2 LLM ROUTER (two-tier)
+  Before any LLM call:
+    Step 1: Semantic cache check (Section 9.5)
+    If cache hit: return cached response, 0 token cost, log as CACHE_HIT
+
+    Step 2: Intent + confidence scoring
+    If intent is FAQ/GREETING AND confidence > 0.85:
+      → Route to Tier 1 (Gemini 1.5 Flash or GPT-4o-mini)
+    If intent is BUY_INTENT, REFUND_REQUEST, or function calling needed:
+      → Route to Tier 2 (GPT-4o or Claude Sonnet)
+    If confidence < 0.50 and strictness = STRICT:
+      → Skip LLM, trigger "Wait for Human" state
+
+  Log: token usage, model, cost per conversation.
+  Monthly AI budget cap per tenant: when reached, force Tier 1 only.
+  Show estimated monthly AI cost in analytics dashboard.
+
+9.3 RAG KNOWLEDGE BASE
+  Chunking: 512 tokens per chunk, 50-token overlap.
+  Embeddings: stored in pgvector (or Pinecone/Weaviate per deployment).
+  On inbound question:
+    a. Embed the question
+    b. Retrieve top-3 most similar chunks from brand's KB
+    c. Log similarity scores
+
+  Strictness routing:
+    STRICT: if max similarity < 0.75 → do NOT answer → "Wait for Human"
+            Log as KB gap for tenant review
+    BALANCED: if 0.50 ≤ score < 0.75 → answer with confidence disclaimer
+    CREATIVE: answer even with low retrieval confidence
+
+  Every retrieval logged to ai_audit_logs (chunk, score, question, answer).
+
+9.4 PERSONA-BASED AI
+  Each brand configures:
+    - Persona name + tone (friendly/professional/witty)
+    - Language
+    - Forbidden topics (hard block — never attempt to answer)
+    - "If unsure" behavior: hand off / ask clarifying question / offer support
+  Persona injected into every LLM system prompt.
+
+9.5 SEMANTIC CACHE (RedisVL)
+  On each inbound question:
+    a. Compute embedding of question
+    b. Query RedisVL for semantically similar cached responses
+    c. Similarity threshold: 0.92 → cache hit
+    d. Cache TTL: 6 hours (FAQ) / 30 minutes (product/inventory)
+    e. Invalidate brand cache on: new KB upload, product price change
+
+9.6 AGENTIC TOOL-USE (function calling, Tier 2 only)
+  Available functions:
+    get_order_status(email) → Shopify Orders API
+    book_appointment(date, service) → Calendly API
+    get_product_info(product_id) → TikTok Shop API or Shopify
+    get_tiktok_inventory(product_id) → TikTok Shop API (real-time)
+    custom_webhook(url, payload) → any external system
+
+  Multi-step reasoning: AI can chain up to 3 tool calls per turn.
+  All function call inputs + outputs logged to ai_audit_logs.
+  Timeout: 5s per function call. On timeout: send hold message,
+  retry in background. Keep 24h window active.
+
+  All 3rd-party credentials (Shopify, Calendly) stored encrypted via
+  AWS KMS (same envelope encryption as OAuth tokens). Never plain text.
+  Outbound via Token-Bucket Proxy: max 40 req/min per merchant tenant.
+
+9.7 AI-HUMAN SENTIMENT HANDOFF
+  Run sentiment analysis on every inbound message (Tier 1, fast).
+  
+  Trigger "Priority Red" handoff if ANY of:
+    - Sentiment score < -0.6
+    - Phrases: "real person", "human", "manager", "refund", "lawyer",
+               "this is ridiculous", "cancel", "lawsuit"
+    - 3 consecutive messages with bot confidence < threshold
+  
+  On handoff:
+    1. Pause bot immediately (conversation.status = 'HUMAN')
+    2. Ping assigned human agent: in-app notification + email
+    3. Display "Priority Red" badge in Inbox 2.0
+    4. If no human claims within 10 minutes: send configured fallback
+       message (e.g., "We'll get back to you within 2 hours + free code")
+  
+  Human toggle in Inbox 2.0: AI-Human Handoff toggle per conversation.
+  When toggled ON (human mode): bot pauses, human types.
+  When toggled OFF: bot resumes from where it left off.
+
+9.8 FRICTION RECOVERY BLOCK
+  This special flow node auto-activates when:
+    - AI fails to understand user intent twice in a row, OR
+    - Sentiment score drops below -0.7, OR
+    - User explicitly expresses frustration (phrase detection)
+  
+  On activation:
+    1. Immediately terminate bot's turn
+    2. Fire "Priority Red" alert to human agent queue
+    3. Send pre-configured "Friction Recovery" message:
+       (customizable per brand: apology + compensatory offer)
+    4. Set conversation.priority_red = TRUE
+
+9.9 SHADOW A/B GHOST FLOW OPTIMIZER
+  Every flow can have a Ghost Variant (flows.ghost_variant_id).
+  Default ghost traffic: 10% (configurable).
+  
+  Optimizer tracks per variant: conversion rate, drop-off nodes, revenue.
+  Auto-promote trigger: Ghost Variant outperforms main flow by >15%
+  over 500+ interactions → surface "Promote Winner" prompt in UI.
+  Demotion: underperforming Ghost Variant retired, traffic merged back.
+
+9.10 LOYALTY HEAT MAPPING
+  Signal sources per unified_contact_id:
+    - IG/FB: posts liked, stories shared, DMs sent, Reels watched
+    - TikTok: video watch duration (via deeplink pixel), comments, DMs
+    - Purchases: from Shopify webhook or CAPI confirmation
+  
+  Loyalty score computation (0–100):
+    Each signal type has a configurable weight.
+    Score stored in unified_contacts.loyalty_score.
+    Tier assignment:
+      0–33: NEWBIE
+      34–66: FAN
+      67–100: ADVOCATE
+  
+  Warm hello injection: cross-platform context injected into AI prompt:
+    "I noticed you checked out our Blue Hoodie on TikTok and liked
+     our latest IG collab. Since you've been with us since [date],
+     I've unlocked a 15% Legacy Discount just for you."
+  
+  Zero-party shadow tagging: if contact only watches Minimalist content
+  on TikTok, tag them style_preference: "minimalist" before they ever DM.
+  Stored in unified_contacts.zero_party_signals JSONB.
+
+================================================================
+SECTION 10 — UNIFIED CRM — INBOX 2.0
+================================================================
+
+10.1 INBOX INTERFACE
+  All platform DMs (IG, FB, TikTok) in one threaded view, sorted by recency.
+  Real-time message streaming via WebSocket (ZERO polling).
+  
+  Left panel: conversation list
+    - Contact name, platform icon, snippet, timestamp, unread count
+    - "Priority Red" visual alert indicator
+    - Loyalty tier badge (Newbie/Fan/Advocate)
+    - Filter: by platform, by tag, by status (Bot/Human/Closed)
+  
+  Center panel: conversation thread
+    - Full message history across all platforms (unified view)
+    - Typing indicator (real-time)
+    - AI-Human Handoff toggle
+    - Quick-reply templates
+    - Send message box with emoji, image, link
+  
+  Right panel: contact card
+    - Name, platform profiles, loyalty tier, score
+    - Custom fields (editable inline)
+    - Tags (add/remove)
+    - Notes (free text)
+    - Sentiment chart (timeline, color-coded green/amber/red)
+    - Cross-platform activity: posts liked, stories shared, videos watched
+    - Active flow / current node
+    - Attribution: revenue attributed, purchases made
+    - GDPR tools (see Section 10.3)
+
+10.2 IDENTITY RESOLUTION ENGINE
+  On every new contact creation:
+    a. Exact match check: same email OR phone → auto-merge profiles
+    b. Fuzzy match: Jaro-Winkler distance on display_name > 0.85
+       AND interaction domain overlap → place in identity_match_queue
+       with status 'PENDING'
+    c. 0.70–0.85 score: flag in Inbox 2.0 with "Possible Duplicate" badge
+       → human must confirm or dismiss before merge
+  
+  Merged contact retains all interaction history under one unified_contact_id.
+  Merge is reversible: "Split Contact" action available from CRM UI.
+  Every merge logged with reason + method.
+
+10.3 GDPR / CCPA COMPLIANCE TOOLS
+  Per-contact from Inbox 2.0 sidebar:
+    - "Export Contact Data" → generates JSON/CSV of all stored data
+    - "Delete Contact Data" → fires erase job:
+        a. Soft-delete unified_contacts record (set gdpr_deleted_at)
+        b. Null out PII fields (name, email, phone, custom_fields)
+        c. Purge messages content
+        d. Call Meta /me endpoint to delete bot data (if API allows)
+        e. Remove from vector DB (KB matching records)
+        f. Log deletion event to compliance audit log
+  
+  Consent log viewer: shows when/how each contact opted in.
+  Settings page: Export All Data (full tenant), Delete All Data.
+  One-click compliance for any contact in < 3 seconds (UI feedback).
+
+================================================================
+SECTION 11 — ATTRIBUTION & ANALYTICS
+================================================================
+
+11.1 UNIQUE IDENTITY TOKEN + SHORT LINK SYSTEM
+  When bot sends a link in a DM:
+    a. Generate short link slug (e.g., brand.ly/x7k2q)
+    b. Store in short_links table with identity_token, contact_id, flow_id
+    c. Append encrypted ?_pdm=identity_token to destination URL
+    d. Custom domain support per brand
+  
+  Server-side redirect:
+    a. Log click event to attribution_events (event_type: LINK_CLICKED)
+    b. Store click in Redis session (30-min TTL) for cross-platform bridging
+    c. Forward to destination URL
+  
+  Bio deeplink tracking:
+    a. Unique tracking URL per brand for "Link in Bio"
+    b. On click: log BIO_CLICK event, store session token in Redis (30min TTL)
+    c. If same user DMs within TTL: merge bio_click into contact record
+    d. Bridges TikTok profile visit → web visit → DM gap
+
+11.2 META CAPI + TIKTOK EVENTS API (server-side only)
+  On purchase confirmation (Shopify webhook or custom event):
+    a. Retrieve identity_token from order metadata or short link
+    b. Hash PII with SHA-256: email, phone, first_name, last_name
+    c. Fire to Meta Conversions API:
+       event_name: "Purchase"
+       event_source_url, action_source: "website"
+       user_data: { em (hashed email), ph, external_id: identity_token }
+       custom_data: { value, currency }
+    d. Fire to TikTok Events API:
+       event: "CompletePayment"
+       user: { email (hashed), phone_number (hashed), external_id }
+    e. Log CAPI_FIRED event + platform response to attribution_events
+    f. NEVER use browser pixels — all attribution is server-side
+
+11.3 ATTRIBUTED SALES DASHBOARD
+  Powered by ClickHouse. Never queries main Postgres.
+  
+  Views to implement:
+    - Timeline chart: DM interactions vs purchases per day
+    - Funnel per flow: Triggered → Replied → Link Clicked → Purchase
+    - Revenue attributed per flow, per keyword, per AI intent bucket
+    - Ghost A/B variant comparison (side-by-side)
+    - AI cost per conversation (running total + projected monthly)
+    - LLM cache hit rate (cost savings visualization)
+  
+  Filters: date range, platform, flow, brand, contact tier
+  Export: CSV for all views
+  Cache: ClickHouse dashboard queries cached in Redis for 5 minutes
+
+11.4 CLICKHOUSE WRITE PATH
+  Lambda worker writes attribution event to PostgreSQL (source of truth).
+  Debezium CDC connector reads PostgreSQL WAL.
+  Streams to Apache Kafka topic: attribution_events.
+  ClickHouse Kafka engine table consumes and inserts.
+  Never write directly to ClickHouse from application code.
+
+================================================================
+SECTION 12 — TIKTOK SHOP INTEGRATION
+================================================================
+
+12.1 PRODUCT-TO-DM FEATURE
+  When user comments "price?", "how much?", "link please?" on a
+  TikTok Shop livestream:
+    a. Trigger: TikTok Comment-to-DM node with Shop trigger type
+    b. System identifies which product is featured in the livestream
+       (stored in flow trigger config: product_id or category)
+    c. Calls TikTok Shop API for real-time inventory + pricing
+    d. Constructs DM Product Card:
+       - Product image
+       - Product name
+       - Price (live)
+       - Stock status (In Stock / Low Stock / Out of Stock)
+       - "Buy Now" deep-link (with identity_token appended)
+    e. Sends card via TikTok DM API
+  
+  Rate limit: TikTok Shop API rate limits tracked separately from DM API.
+  Use separate token bucket in Redis per brand for Shop API calls.
+
+================================================================
+SECTION 13 — TOKEN HEALTH & PERMISSION DASHBOARD
+================================================================
+
+13.1 PER-ACCOUNT HEALTH CARD
+  For each connected_account show:
+    - Platform icon + account username
+    - Token age (hours since last_refresh_at)
+    - Next scheduled auto-refresh (token_expires_at - 48h)
+    - Status: 🟢 Healthy / 🟡 Expiring (< 72h) / 🔴 Broken
+    - Granted scopes list (color-coded: green=granted, red=missing)
+    - App Review status (per scope, pulled from Meta dev API)
+    - Last webhook received (timestamp + relative time)
+    - Circuit breaker state (Closed/Open/Half-Open)
+    - "Force Refresh" button
+    - "Re-authenticate" button (re-runs OAuth without losing flow data)
+
+13.2 PUSH NOTIFICATION ON TOKEN BREAK
+  When health_status changes to 'BROKEN':
+    a. Fire FCM (Android) / APNs (iOS) push to tenant owner's device
+    b. Send in-app WebSocket alert (account.token_broken event)
+    c. Show banner in dashboard with direct "Re-authenticate" CTA
+    d. Log to audit trail
+
+================================================================
+SECTION 14 — DLQ REPLAY DASHBOARD
+================================================================
+
+  List view of all messages in Dead Letter Queue:
+    Columns: timestamp, platform, contact name, flow name, error reason
+    Filter: by platform, by error type, by time range
+  
+  Actions:
+    - Replay single message (re-inserts into SQS with is_replay=true)
+    - Batch replay all failures from a selected time range
+    - Dismiss (mark as acknowledged without replay)
+  
+  Live status: as replayed messages are reprocessed, status updates
+  in real-time via WebSocket (not polling).
+  
+  Error reason codes displayed in human-readable form:
+    24H_WINDOW_EXPIRED, TOKEN_INVALID, SHOPIFY_TIMEOUT,
+    META_API_503, TIKTOK_API_403, LAMBDA_TIMEOUT, UNKNOWN
+
+================================================================
+SECTION 15 — WEBSOCKET / REAL-TIME TRANSPORT
+================================================================
+
+  Use AWS API Gateway WebSockets or Pusher/Ably.
+  All events are tenant-scoped (a connection only receives events
+  for the authenticated tenant_id).
+
+  WebSocket events to implement:
+    inbox.new_message          → new DM arrives in any connected account
+    inbox.message_read         → read receipt from platform
+    inbox.typing               → user is typing indicator
+    inbox.sentiment_alert      → Priority Red handoff trigger
+    flow.edit.cursor_move      → multiplayer cursor position
+    flow.edit.node_update      → node property changed by another user
+    flow.edit.conflict_resolved → CRDT merge notification
+    account.token_broken       → token health alert
+    account.token_refreshed    → successful token refresh
+    account.circuit_open       → circuit breaker tripped
+    account.rate_limit_warning → approaching rate limit
+    dlq.message_added          → new message in DLQ
+    dlq.message_replayed       → DLQ message reprocessed
+
+================================================================
+SECTION 16 — V8 ISOLATES — CUSTOM CODE BLOCKS (LEGEND TIER)
+================================================================
+
+  Monaco editor (VS Code engine) embedded inside the Custom Code Block node.
+  Execution via Cloudflare Workers or isolated-vm npm package.
+  
+  Sandbox constraints:
+    - 128MB memory cap
+    - 5-second CPU time limit
+    - No filesystem access
+    - No cross-tenant data access
+    - No require() for native modules
+  
+  Available globals inside isolate:
+    - contact (read-only object with all contact fields + custom_fields)
+    - flowVars (read/write key-value store for this flow execution)
+    - fetch() (outbound HTTP — whitelist configurable)
+    - console.log() (output visible in debug panel)
+  
+  Output: return a JSON object that maps to flow variables.
+  Any uncaught error routes message to DLQ with error details.
+
+================================================================
+SECTION 17 — KNOWLEDGE BASE UPLOADER (UI)
+================================================================
+
+  File upload: PDF files via multipart upload → store in S3.
+  URL ingest: paste URL → server-side fetch → HTML to text extraction.
+  
+  On upload:
+    a. Chunking: 512 tokens per chunk, 50-token overlap
+    b. Embedding: call embedding API, store vectors in pgvector/Pinecone
+    c. Update kb_documents.index_status
+    d. Emit WebSocket event: kb.indexed
+  
+  Dashboard per document:
+    - Name, source type, chunk count
+    - Index status: Pending / Indexed / Failed (with error message)
+    - Date indexed
+    - Delete button (removes from vector store + S3)
+  
+  Test panel:
+    - Ask a test question
+    - See AI response + which document chunk was used
+    - See similarity score
+    - Shows which model tier would be used
+
+================================================================
+SECTION 18 — AI AUDIT LOG VIEWER
+================================================================
+
+  Per-conversation trace view. Accessible from Inbox 2.0 conversation panel.
+  
+  Per AI response row show:
+    - Full prompt sent to LLM (system + context + user message)
+    - KB chunks retrieved (with similarity scores, source doc name)
+    - Model tier used (Tier 1 / Tier 2)
+    - Function calls made (name, inputs, outputs)
+    - Final response text
+    - Total token count + estimated cost (USD)
+  
+  Filters: date range, contact, flow, model tier, cost range
+  Export: full log as CSV/JSON for compliance/legal review
+  Retention: 1 year (immutable append-only, no delete)
+  
+  "Why did the AI say that?" trace: single click expands full decision chain.
+
+================================================================
+SECTION 19 — FEATURE FLAGS & TIER GATING
+================================================================
+
+19.1 FEATURE FLAGS
+  Use LaunchDarkly or Redis-backed custom flag store.
+  Wrap EVERY new feature behind a flag. Enables incremental deploy
+  without breaking existing tenants.
+
+19.2 TIER GATES
+  Enforce at both API middleware and UI layer:
+  
+  FREE tier:
+    - Basic flow builder (Trigger + Send Message + Smart Delay only)
+    - 1 connected account
+    - 500 contacts max
+    - No AI Step
+    - No multiplayer
+    - No Custom Code Block
+    - No Super Randomizer
+    - No Ghost Flow A/B
+  
+  PRO tier:
+    - Full builder (all node types except Custom Code Block)
+    - 3 connected accounts
+    - 10,000 contacts
+    - AI Step with 1 KB document, no function calling
+    - Multiplayer (2 users)
+    - Basic attribution dashboard
+  
+  LEGEND tier:
+    - Unlimited connected accounts + contacts
+    - Full AI with function calling (Shopify, Calendly, custom)
+    - Custom Code Block (V8 isolates)
+    - Multiplayer (unlimited users)
+    - Ghost Flow A/B optimizer
+    - App Marketplace (install 3rd-party blocks)
+    - TikTok Shop Product-to-DM
+    - AI Audit Log Viewer
+    - DLQ Replay Dashboard
+    - Custom short-link domain
+
+================================================================
+SECTION 20 — MONITORING & OBSERVABILITY
+================================================================
+
+  Every Lambda function and service must emit:
+
+  CloudWatch metrics (custom):
+    - invocation_count (per service, per tenant)
+    - error_rate (per service, per 5-min window)
+    - p50/p95/p99 latency (per service)
+    - queue_depth (SQS main + DLQ)
+    - circuit_breaker_trips (per account)
+    - token_refresh_failures (per platform)
+    - ai_cost_usd (per hour, per tenant)
+    - cache_hit_rate (RedisVL semantic cache)
+
+  Structured JSON logs (every log line must include):
+    { tenant_id, brand_id, flow_id, event_type, duration_ms,
+      platform, error?, stack_trace? }
+
+  Alerts (PagerDuty or SNS):
+    - Error rate > 5% for any service over 5 minutes
+    - SQS DLQ depth > 100 messages
+    - Circuit breaker tripped for any brand
+    - Token refresh failure (immediate alert)
+    - ClickHouse ingest lag > 5 minutes
+    - Redis memory > 80% capacity
+
+================================================================
+SECTION 21 — TESTING REQUIREMENTS
+================================================================
+
+  Unit tests:
+    - All token encryption/decryption logic (mock KMS)
+    - 24-hour window validator (edge cases: exact 24h, 23.5h, 25h)
+    - Rate limit token bucket (boundary conditions)
+    - Dedup layer (duplicate delivery_id detection)
+    - RLS isolation (Tenant A query returns 0 rows from Tenant B data)
+    - Intent classifier (all 8 built-in intent buckets + custom)
+    - Circuit breaker state transitions (CLOSED → OPEN → HALF_OPEN → CLOSED)
+    - Fuzzy identity matching (Jaro-Winkler edge cases)
+
+  Integration tests:
+    - Full Meta OAuth MBE flow (mocked Meta responses)
+    - TikTok Business Login flow (mocked TikTok responses)
+    - Comment-to-DM trigger: webhook in → DM sent (end-to-end mocked)
+    - AI Step: question → RAG retrieval → LLM call → response (mocked LLM)
+    - Shopify function call: user asks for order status → Shopify API → DM reply
+    - CAPI fire: purchase event → Meta CAPI → TikTok Events API (mocked)
+
+  Load test:
+    - Ingressor: 50,000 POST requests in 3 seconds, zero drops
+    - Assert: all 50,000 are in S3 vault AND in SQS queue
+    - Assert: p95 Ingressor response time < 50ms
+
+  E2E test (full happy path):
+    1. TikTok comment "link please" arrives as webhook
+    2. Intent classified as LINK_REQUEST
+    3. Flow engine routes to correct node
+    4. Bot sends DM with short link containing identity_token
+    5. User clicks link → click logged to attribution_events
+    6. User purchases on Shopify → Shopify webhook fires
+    7. CAPI event fires to Meta + TikTok
+    8. Revenue attributed to flow in ClickHouse dashboard
+    9. Verify: complete chain in < 500ms total (excluding purchase step)
+
+================================================================
+SECTION 22 — DOCUMENTATION REQUIREMENTS
+================================================================
+
+  For every API endpoint:
+    - OpenAPI 3.0 spec (auto-generated where possible)
+  
+  For every background service:
+    - Internal runbook: "What to do if this breaks at 3am"
+    - Architecture Decision Record (ADR): why this approach
+  
+  For every AI decision:
+    - Traceable in AI Audit Log (Section 18)
+    - "Why did the AI say that?" must be answerable in < 10 seconds
+      by any engineer by looking at ai_audit_logs
+
+================================================================
+SECTION 23 — BUILD ORDER (Follow exactly)
+================================================================
+
+  Phase 1 (Weeks 1–4): Core pipes
+    D1 → B1 (KMS vault) → B4 (dedup) → B5 (S3 vault) →
+    B3 (24h validator) → B6 (RLS) → B7 (schema) →
+    B8 (rate limiter) → A4 (OAuth screen) → A3 (preflight wizard)
+
+  Phase 2 (Weeks 5–8): Flow builder + queue
+    A1 (flow builder) → A2 (multiplayer) → D4 (Yjs CRDTs) →
+    D2 (WebSockets) → D3 (Redis context store) →
+    B9 (circuit breaker) → B10 (DLQ) → B13 (omni-channel state) →
+    A5 (permission dashboard) → A7 (token health panel)
+
+  Phase 3 (Weeks 9–12): AI + analytics
+    C1 (intent engine) → C2 (RAG KB) → C3 (sentiment handoff) →
+    C4 (LLM router) → C5 (semantic cache) → C6 (persona AI) →
+    C7 (function calling) → C8 (identity resolution) →
+    C9 (loyalty heat map) → B11 (CAPI) → B12 (short links) →
+    A6 (Inbox 2.0) → A10 (attribution dashboard) →
+    A11 (KB uploader) → A20 (GDPR UI) → remaining features
+
+================================================================
+SECTION 24 — MARKET-LEADER SECRET FEATURES (Competitive moat)
+================================================================
+
+These are features ManyChat, Tidio, and Intercom have but don't
+document publicly. Implement all of them.
+
+24.1 ZERO-FRICTION ONBOARDING
+  The #1 reason users churn from competitors: complex Meta setup.
+  Your MBE flow must feel like 1-click. Never mention "App Review"
+  to end-users. Abstract it completely. Users just click "Connect"
+  and see their accounts. Test: a non-technical user must be able to
+  connect their first account in < 90 seconds.
+
+24.2 LLM COST MOAT
+  Competitors charge flat per-message fees. You use semantic caching
+  + LLM routing to serve 60%+ of AI responses from cache at zero cost.
+  Pass 30% of this saving to users as a visible "AI Credits Saved" metric
+  in their dashboard. This is a retention feature, not just a cost control.
+
+24.3 SERVER-SIDE ATTRIBUTION (The "Dark Funnel" killer)
+  Competitors use browser pixels (blocked by iOS ATT, Safari ITP).
+  Your CAPI + TikTok Events API integration gives brands 95%+ attribution
+  accuracy vs. competitors' 40–60%. Market this as "Attribution that
+  actually works in 2026." This is the #1 reason enterprise brands switch.
+
+24.4 GHOST FLOW A/B (The unfair advantage)
+  No competitor has continuous background A/B testing running at all times.
+  The "auto-promote winner" feature means brands using FlowPulse are
+  constantly optimizing without any manual work. Market as "Your flows
+  get smarter automatically."
+
+24.5 UNIFIED IDENTITY RESOLUTION
+  ManyChat shows the same person as two separate contacts if they DM
+  on both Instagram and Facebook. FlowPulse merges them automatically
+  and shows one customer view with full cross-platform history. This
+  alone is a reason for agencies to switch.
+
+24.6 WARM HELLO LOYALTY ENGINE
+  No competitor injects cross-platform behavioral context into the AI's
+  first message. "I noticed you watched our TikTok about the Blue Hoodie"
+  is magic to a customer. Implement this as a differentiating feature
+  with prominent marketing copy in the onboarding tour.
+
+24.7 FRICTION RECOVERY AUTO-COMPENSATION
+  When the bot fails, automatically send an apology + compensation offer.
+  Tidio and ManyChat just show an error. FlowPulse turns failures into
+  loyalty moments. This is a "set and forget" brand insurance policy.
+
+24.8 TIKTOK SHOP PRODUCT CARD
+  No Western competitor has real-time TikTok Shop inventory-to-DM.
+  This is the #1 feature for e-commerce brands doing TikTok Shop
+  livestreams in 2026. It alone justifies the LEGEND tier price.

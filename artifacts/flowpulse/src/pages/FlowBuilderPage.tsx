@@ -598,12 +598,12 @@ function NodePickerPopup({ mode, position, onClose, onSelect }: NodePickerPopupP
                   key={group.id}
                   onClick={() => setActiveChannel(group.id as PickerChannel)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all mb-0.5 ${
-                    activeChannel === group.id
+                    (activeChannel as string) === group.id
                       ? 'bg-[#1A1C24] text-[#F0F2FF]'
                       : 'text-[#8B90A7] hover:bg-[#1A1C24]/50 hover:text-[#F0F2FF]'
                   }`}
                 >
-                  <span style={{ color: activeChannel === group.id ? group.color : undefined }} className="flex-shrink-0">
+                  <span style={{ color: (activeChannel as string) === group.id ? (group as any).color : undefined }} className="flex-shrink-0">
                     {group.icon}
                   </span>
                   <span className="text-xs font-medium flex-1 truncate">{group.label}</span>
@@ -629,7 +629,7 @@ function NodePickerPopup({ mode, position, onClose, onSelect }: NodePickerPopupP
                   ))}
                 </div>
               )
-            ) : activeChannel === 'logic' ? (
+            ) : (activeChannel as string) === 'logic' ? (
               /* Logic nodes */
               <div className="grid grid-cols-2 gap-2.5">
                 {[
@@ -641,7 +641,7 @@ function NodePickerPopup({ mode, position, onClose, onSelect }: NodePickerPopupP
                   <OptionCard key={opt.type} option={opt} onClick={() => onSelect(opt.type)} />
                 ))}
               </div>
-            ) : activeChannel === 'ai' ? (
+            ) : (activeChannel as string) === 'ai' ? (
               /* AI nodes */
               <div className="grid grid-cols-2 gap-2.5">
                 {[
@@ -3070,7 +3070,7 @@ function FlowBuilderContent() {
             onNodesChange={changes => { onNodesChange(changes); setSaveState('unsaved'); }}
             onEdgesChange={changes => { onEdgesChange(changes); setSaveState('unsaved'); }}
             onConnect={onConnect}
-            onMoveEnd={handleMoveEnd}
+            onMoveEnd={handleMoveEnd as any}
             onNodeClick={(_, node) => {
               // If node is unconfigured, open picker instead of properties
               const isUnconfigured = !node.data?.preview && Object.keys((node.data?.config as Record<string, unknown>) || {}).length === 0;

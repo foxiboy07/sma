@@ -753,7 +753,7 @@ function DetailModal({ tool, onClose }: DetailModalProps) {
                 <CopyBtn text={generateClickToMessageUrl(tool)} field="ctm_url" />
               </div>
             </div>
-            {tool.config.ad_reference && (
+            {!!tool.config.ad_reference && (
               <div className="bg-[#0A0B0F] rounded-xl p-3 flex items-center justify-between">
                 <div>
                   <p className="text-[10px] text-[#4B5068] uppercase tracking-wide mb-0.5">Ad Reference</p>
@@ -829,7 +829,7 @@ function DetailModal({ tool, onClose }: DetailModalProps) {
                 </a>
               </div>
             </div>
-            {tool.config.reward_description && (
+            {!!tool.config.reward_description && (
               <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3">
                 <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-1">Reward</p>
                 <p className="text-sm text-[#F0F2FF]">{tool.config.reward_description as string}</p>

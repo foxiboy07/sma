@@ -1078,7 +1078,7 @@ function SegmentCard({ segment, onOpen, onEdit, onDelete, onUseBroadcast }: Segm
               { label: 'View Details', icon: <ChevronRight className="w-3.5 h-3.5" />, onClick: onOpen },
               { label: 'Edit Segment', icon: <Edit2 className="w-3.5 h-3.5" />, onClick: onEdit },
               { label: 'Use in Broadcast', icon: <Send className="w-3.5 h-3.5" />, onClick: onUseBroadcast },
-              { divider: true },
+              { divider: true, label: '' },
               { label: 'Delete Segment', icon: <Trash2 className="w-3.5 h-3.5" />, onClick: onDelete, danger: true },
             ]}
           />

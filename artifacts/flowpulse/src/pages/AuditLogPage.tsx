@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Download, Brain } from 'lucide-react';
 import { Card, Badge, Button } from '../components/ui';
 import { format } from 'date-fns';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
 interface AuditLog {
@@ -32,25 +31,9 @@ export function AuditLogPage() {
     async function fetchLogs() {
       setLoading(true);
 
-      const [logsRes, contactsRes] = await Promise.all([
-        supabase
-          .from('ai_audit_logs')
-          .select('*')
-          .eq('tenant_id', tenant.id)
-          .order('created_at', { ascending: false })
-          .limit(50),
-        supabase
-          .from('unified_contacts')
-          .select('id, display_name')
-          .eq('tenant_id', tenant.id),
-      ]);
-
+      // AI audit logs are served via API in a future iteration
+      const logsRes = { data: [] as Record<string, unknown>[] };
       const contactMap = new Map<string, string>();
-      if (contactsRes.data) {
-        for (const c of contactsRes.data) {
-          contactMap.set(c.id, c.display_name);
-        }
-      }
 
       const mapped: AuditLog[] = (logsRes.data ?? []).map((row: Record<string, unknown>) => ({
         id: row.id as string,

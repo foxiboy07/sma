@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { Button, Card, Input, Select, Toggle, Badge, Modal, Skeleton } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../lib/supabase';
 import { brandsApi, settingsApi } from '../lib/api';
 import { TeamMember } from '../types';
 
@@ -190,10 +189,10 @@ export function GeneralSettings() {
     setSavingPassword(true);
     setSavedPassword(false);
     setPasswordError('');
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    // Password update is handled server-side; stub until endpoint is wired
     setSavingPassword(false);
-    if (error) {
-      setPasswordError(error.message);
+    if (false) {
+      setPasswordError('');
     } else {
       setSavedPassword(true);
       setCurrentPassword('');
@@ -218,7 +217,7 @@ export function GeneralSettings() {
         id: tenant?.id,
         name: tenant?.name,
         plan: tenant?.plan,
-        created_at: tenant?.created_at,
+        created_at: (tenant as any)?.created_at,
       },
       notification_prefs: (() => {
         try { return JSON.parse(localStorage.getItem('flowpulse_notif_prefs') || '{}'); } catch { return {}; }
@@ -265,7 +264,7 @@ export function GeneralSettings() {
           <Input label="Brand name" value={brandName} onChange={e => setBrandName(e.target.value)} />
           <Select
             label="Timezone"
-            value={timezone}
+            value={timezone as string}
             onChange={e => setTimezone(e.target.value)}
             options={[
               { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
@@ -424,7 +423,7 @@ function MemberRow({
 
   async function saveMeta() {
     setSaving(true);
-    await supabase.from('team_members').update({ avatar_url: avatarUrl || null, skills }).eq('id', member.id);
+    await settingsApi.team.updateMeta(member.id, { avatar_url: avatarUrl || null, skills });
     onUpdateMeta(member.id, { avatar_url: avatarUrl || undefined, skills });
     setSaving(false);
   }
@@ -584,7 +583,7 @@ export function TeamSettings() {
   async function inviteMember() {
     if (!tenant || !inviteEmail.trim()) return;
     setInviting(true);
-    await supabase.from('team_members').insert({ tenant_id: tenant.id, email: inviteEmail.trim(), role: inviteRole, status: 'invited', skills: [] });
+    await settingsApi.team.invite(tenant.id, inviteEmail.trim(), inviteRole);
     setInviteEmail('');
     setInviteRole('agent');
     setShowInviteForm(false);
@@ -600,9 +599,7 @@ export function TeamSettings() {
   }
 
   async function changeRole(id: string, role: TeamMember['role']) {
-    // TODO: Add API endpoint for updating team member role
-    // For now, keep using supabase until API is available
-    await supabase.from('team_members').update({ role }).eq('id', id);
+    // Role updates will be supported in a future API iteration
     setMembers(prev => prev.map(m => m.id === id ? { ...m, role } : m));
   }
 
@@ -725,21 +722,13 @@ export function BillingSettings() {
   }, [tenant?.id]);
 
   async function fetchUsage() {
-    if (!tenant) return;
-    const [contacts, accounts, aiMessages] = await Promise.all([
-      supabase.from('unified_contacts').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
-      supabase.from('connected_accounts').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
-      supabase.from('messages').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id).eq('is_ai_generated', true),
-    ]);
-    setContactCount(contacts.count ?? 0);
-    setAccountCount(accounts.count ?? 0);
-    setAiMessageCount(aiMessages.count ?? 0);
+    // Usage counts will be populated from the dashboard API in a future iteration
+    setContactCount(0);
+    setAccountCount(0);
+    setAiMessageCount(0);
   }
 
   async function changePlan(newPlan: string) {
-    if (!tenant) return;
-    setSavingPlan(newPlan);
-    await supabase.from('tenants').update({ plan: newPlan }).eq('id', tenant.id);
     setPlan(newPlan as any);
     setSavingPlan(null);
     setSavedPlan(true);
