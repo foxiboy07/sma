@@ -2,6 +2,10 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Request, Response, NextFunction } from "express";
 
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+  console.error("FATAL: JWT_SECRET environment variable is required in production");
+  process.exit(1);
+}
 const JWT_SECRET = process.env.JWT_SECRET ?? "flowpulse-dev-secret-change-in-prod";
 const JWT_EXPIRES_IN = "7d";
 

@@ -22,9 +22,8 @@ import {
   Megaphone
 } from 'lucide-react';
 import { Button, Badge, Toggle, Modal } from '../components/ui';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { flowEngineApi } from '../lib/api';
+import { flowEngineApi, flowsApi } from '../lib/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & TYPES
@@ -2333,61 +2332,49 @@ function FlowBuilderContent() {
     setZoom(newViewport.zoom);
   }, []);
 
-  // ── Load flow from Supabase ──
+  // ── Load flow from API ──
   useEffect(() => {
     if (!id || !tenant) return;
 
     async function load() {
       setLoading(true);
       try {
-        const { data: flow } = await supabase
-          .from('flows')
-          .select('name, status')
-          .eq('id', id)
-          .single();
+        const flow = await flowsApi.get(id!).catch(() => null) as any;
 
         if (flow) {
           setFlowName(flow.name || 'Untitled Flow');
           setStatus(flow.status || 'DRAFT');
+
+          const dbNodes = flow.nodes || [];
+          const rfNodes: Node[] = dbNodes.map((n: any) => ({
+            id: n.id,
+            type: 'flowNode',
+            position: { x: Number(n.positionX ?? n.position_x ?? 0), y: Number(n.positionY ?? n.position_y ?? 0) },
+            data: {
+              nodeType: n.nodeType ?? n.node_type,
+              label: n.label || NODE_LABELS[n.nodeType ?? n.node_type] || '',
+              preview: buildPreview(n.nodeType ?? n.node_type, n.config || {}),
+              config: n.config || {},
+              dbId: n.id,
+              onPlusClick: (nodeId: string) => openPicker('action', nodeId),
+            },
+          }));
+          setNodes(rfNodes);
+
+          const dbEdges = flow.edges || [];
+          const rfEdges: Edge[] = dbEdges.map((e: any) => ({
+            id: e.id,
+            source: e.sourceNodeId ?? e.source_node_id,
+            target: e.targetNodeId ?? e.target_node_id,
+            sourceHandle: e.sourceHandle ?? e.source_handle ?? null,
+            type: 'smoothstep',
+            label: e.edgeLabel ?? e.edge_label ?? undefined,
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#2A2E42' },
+            style: { stroke: '#2A2E42', strokeWidth: 1.5 },
+            data: { dbId: e.id },
+          }));
+          setEdges(rfEdges);
         }
-
-        const { data: dbNodes } = await supabase
-          .from('flow_nodes')
-          .select('*')
-          .eq('flow_id', id);
-
-        const rfNodes: Node[] = (dbNodes || []).map((n: any) => ({
-          id: n.id,
-          type: 'flowNode',
-          position: { x: Number(n.position_x), y: Number(n.position_y) },
-          data: {
-            nodeType: n.node_type,
-            label: n.label || NODE_LABELS[n.node_type] || '',
-            preview: buildPreview(n.node_type, n.config || {}),
-            config: n.config || {},
-            dbId: n.id,
-            onPlusClick: (nodeId: string) => openPicker('action', nodeId),
-          },
-        }));
-        setNodes(rfNodes);
-
-        const { data: dbEdges } = await supabase
-          .from('flow_edges')
-          .select('*')
-          .eq('flow_id', id);
-
-        const rfEdges: Edge[] = (dbEdges || []).map((e: any) => ({
-          id: e.id,
-          source: e.source_node_id,
-          target: e.target_node_id,
-          sourceHandle: e.source_handle || null,
-          type: 'smoothstep',
-          label: e.edge_label || undefined,
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#2A2E42' },
-          style: { stroke: '#2A2E42', strokeWidth: 1.5 },
-          data: { dbId: e.id },
-        }));
-        setEdges(rfEdges);
       } catch (err) {
         console.error('Error loading flow:', err);
       } finally {
@@ -2643,122 +2630,25 @@ function FlowBuilderContent() {
 
     try {
       // 1. Update flow metadata
-      await supabase
-        .from('flows')
-        .update({ name: flowName, updated_at: new Date().toISOString() })
-        .eq('id', id);
+      await flowsApi.update(id, { name: flowName });
 
-      // 2. Split nodes into existing (dbId) vs new
-      const existingNodes = nodes.filter(n => n.data?.dbId);
-      const newNodes = nodes.filter(n => !n.data?.dbId);
-
-      if (existingNodes.length > 0) {
-        await supabase.from('flow_nodes').upsert(
-          existingNodes.map(n => ({
-            id: n.data!.dbId as string,
-            flow_id: id,
-            tenant_id: tenant.id,
-            node_type: n.data!.nodeType as string,
-            label: n.data!.label as string || null,
-            position_x: n.position.x,
-            position_y: n.position.y,
-            config: (n.data!.config as Record<string, unknown>) || {},
-          })),
-          { onConflict: 'id' }
-        );
-      }
-
-      if (newNodes.length > 0) {
-        const { data: inserted } = await supabase.from('flow_nodes').insert(
-          newNodes.map(n => ({
-            flow_id: id,
-            tenant_id: tenant.id,
-            node_type: n.data!.nodeType as string,
-            label: n.data!.label as string || null,
-            position_x: n.position.x,
-            position_y: n.position.y,
-            config: (n.data!.config as Record<string, unknown>) || {},
-          }))
-        ).select();
-
-        if (inserted && inserted.length === newNodes.length) {
-          const idMap = new Map<string, string>();
-          inserted.forEach((dbNode: any, i: number) => {
-            idMap.set(newNodes[i].id, dbNode.id);
-          });
-
-          setNodes(nds => nds.map(n => {
-            const dbId = idMap.get(n.id);
-            if (dbId) return { ...n, id: dbId, data: { ...n.data, dbId } };
-            return n;
-          }));
-          setEdges(eds => eds.map(e => {
-            const s = idMap.get(e.source) || e.source;
-            const t = idMap.get(e.target) || e.target;
-            return (s !== e.source || t !== e.target) ? { ...e, source: s, target: t } : e;
-          }));
-        }
-      }
-
-      // 3. Delete removed nodes
-      const { data: allDbNodes } = await supabase.from('flow_nodes').select('id').eq('flow_id', id);
-      if (allDbNodes) {
-        const currentIds = new Set(nodes.map(n => (n.data?.dbId as string) || '').filter(Boolean));
-        const toDelete = allDbNodes.filter((n: any) => !currentIds.has(n.id)).map((n: any) => n.id);
-        if (toDelete.length > 0) await supabase.from('flow_nodes').delete().in('id', toDelete);
-      }
-
-      // 4. Edges — existing
-      const existingEdges = edges.filter(e => e.data?.dbId);
-      if (existingEdges.length > 0) {
-        await supabase.from('flow_edges').upsert(
-          existingEdges.map(e => ({
-            id: e.data!.dbId as string,
-            flow_id: id,
-            tenant_id: tenant.id,
-            source_node_id: e.source,
-            target_node_id: e.target,
-            source_handle: e.sourceHandle || null,
-            edge_label: (e.label as string) || null,
-            condition_config: {},
-          })),
-          { onConflict: 'id' }
-        );
-      }
-
-      // 5. Edges — new
-      const newEdges = edges.filter(e => !e.data?.dbId);
-      if (newEdges.length > 0) {
-        const { data: insertedEdges } = await supabase.from('flow_edges').insert(
-          newEdges.map(e => ({
-            flow_id: id,
-            tenant_id: tenant.id,
-            source_node_id: e.source,
-            target_node_id: e.target,
-            source_handle: e.sourceHandle || null,
-            edge_label: (e.label as string) || null,
-            condition_config: {},
-          }))
-        ).select();
-
-        if (insertedEdges) {
-          setEdges(eds => eds.map(e => {
-            if (e.data?.dbId) return e;
-            const match = insertedEdges.find(
-              (ie: any) => ie.source_node_id === e.source && ie.target_node_id === e.target
-            );
-            return match ? { ...e, data: { ...e.data, dbId: match.id } } : e;
-          }));
-        }
-      }
-
-      // 6. Delete removed edges
-      const { data: allDbEdges } = await supabase.from('flow_edges').select('id').eq('flow_id', id);
-      if (allDbEdges) {
-        const currentEdgeIds = new Set(edges.map(e => (e.data?.dbId as string) || '').filter(Boolean));
-        const toDelete = allDbEdges.filter((e: any) => !currentEdgeIds.has(e.id)).map((e: any) => e.id);
-        if (toDelete.length > 0) await supabase.from('flow_edges').delete().in('id', toDelete);
-      }
+      // 2 & 3 & 4 & 5 & 6. Save nodes + edges via API
+      const apiNodes = nodes.map(n => ({
+        id: (n.data?.dbId as string) || n.id,
+        nodeType: n.data?.nodeType as string,
+        label: (n.data?.label as string) || null,
+        positionX: n.position.x,
+        positionY: n.position.y,
+        config: (n.data?.config as Record<string, unknown>) || {},
+      }));
+      const apiEdges = edges.map(e => ({
+        id: (e.data?.dbId as string) || e.id,
+        sourceNodeId: e.source,
+        targetNodeId: e.target,
+        sourceHandle: e.sourceHandle || null,
+        edgeLabel: (e.label as string) || null,
+      }));
+      await flowsApi.saveNodes(id, apiNodes, apiEdges);
 
       setSaveState('saved');
     } catch (err) {
@@ -2774,7 +2664,8 @@ function FlowBuilderContent() {
     setStatus(next);
     if (id) {
       try {
-        await supabase.from('flows').update({ status: next, updated_at: new Date().toISOString() }).eq('id', id);
+        if (next === 'ACTIVE') await flowsApi.publish(id);
+        else await flowsApi.pause(id);
       } catch {
         setStatus(status);
       }

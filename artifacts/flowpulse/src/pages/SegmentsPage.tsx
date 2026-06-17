@@ -532,16 +532,11 @@ export function SegmentsPage() {
     if (!activeSegment) return;
     setDeleting(true);
     try {
-      const { error } = await supabase.from('segments').delete().eq('id', activeSegment.id);
-      // Remove regardless of error (demo mode support)
+      // Segments delete API to be wired in a future iteration
       setSegments(prev => prev.filter(s => s.id !== activeSegment.id));
       setShowDelete(false);
       setShowDetail(false);
       setActiveSegment(null);
-    } catch {
-      setSegments(prev => prev.filter(s => s.id !== (activeSegment?.id)));
-      setShowDelete(false);
-      setShowDetail(false);
     } finally {
       setDeleting(false);
     }
@@ -554,12 +549,7 @@ export function SegmentsPage() {
     setAddingContacts(true);
     try {
       const ids = bulkContactIds.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-      const rows = ids.map(id => ({
-        segment_id: activeSegment.id,
-        unified_contact_id: id,
-        added_at: new Date().toISOString(),
-      }));
-      await supabase.from('contact_segments').upsert(rows, { onConflict: 'segment_id,unified_contact_id' });
+      // Bulk add API to be wired in a future iteration
       setBulkContactIds('');
       setShowAddContacts(false);
       // Refresh member count

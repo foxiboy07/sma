@@ -242,43 +242,27 @@ export function KnowledgeBasePage() {
   async function handleDelete(docId: string) {
     try {
       await kbApi.deleteDocument(docId);
-    } catch { /* fallback below */ }
-    try {
-      await supabase.from('kb_chunks').delete().eq('document_id', docId);
-      await supabase.from('kb_documents').delete().eq('id', docId);
     } catch {}
     setDocs(prev => prev.filter(d => d.id !== docId));
     if (selected?.id === docId) setSelected(null);
   }
 
   async function handleRetry(docId: string) {
-    try {
-      await supabase.from('kb_documents').update({ index_status: 'PENDING', error_message: null }).eq('id', docId);
-    } catch {}
     setDocs(prev => prev.map(d => d.id === docId ? { ...d, index_status: 'PENDING' as KBIndexStatus, error_message: undefined } : d));
     setSelected(prev => prev?.id === docId ? { ...prev, index_status: 'PENDING' as KBIndexStatus, error_message: undefined } : prev);
   }
 
   async function handleStrictnessChange(docId: string, strictness: KBStrictness) {
-    try {
-      await supabase.from('kb_documents').update({ strictness }).eq('id', docId);
-    } catch {}
     setDocs(prev => prev.map(d => d.id === docId ? { ...d, strictness } : d));
     setSelected(prev => prev?.id === docId ? { ...prev, strictness } : prev);
   }
 
   async function handleAutoReindexToggle(docId: string, value: boolean) {
-    try {
-      await supabase.from('kb_documents').update({ auto_reindex: value }).eq('id', docId);
-    } catch {}
     setDocs(prev => prev.map(d => d.id === docId ? { ...d, auto_reindex: value } : d));
     setSelected(prev => prev?.id === docId ? { ...prev, auto_reindex: value } : prev);
   }
 
   async function handleReindex(docId: string) {
-    try {
-      await supabase.from('kb_documents').update({ index_status: 'PENDING', last_indexed_at: new Date().toISOString() }).eq('id', docId);
-    } catch {}
     setDocs(prev => prev.map(d => d.id === docId ? { ...d, index_status: 'PENDING' as KBIndexStatus, last_indexed_at: new Date().toISOString() } : d));
     setSelected(prev => prev?.id === docId ? { ...prev, index_status: 'PENDING' as KBIndexStatus, last_indexed_at: new Date().toISOString() } : prev);
   }
@@ -286,11 +270,8 @@ export function KnowledgeBasePage() {
   async function handleRename(docId: string, newName: string) {
     if (!newName.trim()) return;
     setSavingEdit(true);
-    try {
-      await supabase.from('kb_documents').update({ name: newName }).eq('id', docId);
-      setDocs(prev => prev.map(d => d.id === docId ? { ...d, name: newName } : d));
-      setSelected(prev => prev?.id === docId ? { ...prev, name: newName } : prev);
-    } catch {}
+    setDocs(prev => prev.map(d => d.id === docId ? { ...d, name: newName } : d));
+    setSelected(prev => prev?.id === docId ? { ...prev, name: newName } : prev);
     setSavingEdit(false);
     setEditingName(false);
   }

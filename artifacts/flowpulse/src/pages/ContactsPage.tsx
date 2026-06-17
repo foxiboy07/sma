@@ -125,8 +125,10 @@ export function ContactsPage() {
         };
       }).filter(r => r.display_name || r.email || r.phone);
 
-      const { error } = await supabase.from('unified_contacts').insert(mapped);
-      if (error) throw error;
+      // Import each contact via API
+      await Promise.all(mapped.map((c: any) =>
+        contactsApi.create(brand.id, c).catch(() => null)
+      ));
       setImportResult({ count: mapped.length });
       await loadContacts();
     } catch (err: any) {

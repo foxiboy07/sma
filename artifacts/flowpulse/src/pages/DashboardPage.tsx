@@ -73,77 +73,31 @@ export function DashboardPage() {
     cacheHitRate: '0%',
   });
 
-  // Refresh function to reload dashboard data
+  // Refresh function to reload dashboard data via API
   const refreshData = useCallback(() => {
-    if (!tenant?.id) return;
-
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-    Promise.all([
-      supabase.from('conversations')
-        .select('id, platform, created_at, unified_contacts(display_name)')
-        .eq('tenant_id', tenant.id)
-        .eq('priority_red', true)
-        .neq('status', 'CLOSED')
-        .order('created_at', { ascending: true })
-        .limit(5),
-
-      supabase.from('ai_audit_logs')
-        .select('id, contact_id, intent_classified, model_tier, estimated_cost_usd, flow_id, unified_contacts(display_name)')
-        .eq('tenant_id', tenant.id)
-        .order('created_at', { ascending: false })
-        .limit(5),
-
-      supabase.from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant.id)
-        .eq('direction', 'OUTBOUND')
-        .gte('created_at', todayStart),
-
-      supabase.from('conversations')
-        .select('status, priority_red')
-        .eq('tenant_id', tenant.id)
-        .gte('last_message_at', twentyFourHoursAgo),
-    ]).then(([priorityRedRes, aiDecisionsRes, dmsRes, conversationsRes]) => {
-      const prData = (priorityRedRes.data || []).map((c: any) => {
-        const created = c.created_at ? new Date(c.created_at) : now;
-        const waitingMin = Math.max(1, Math.round((now.getTime() - created.getTime()) / 60000));
-        return {
-          id: c.id,
-          name: c.unified_contacts?.display_name || 'Unknown',
-          platform: c.platform,
-          waitingMin,
-        };
-      });
-      setPriorityRed(prData);
-
-      const aiData = (aiDecisionsRes.data || []).map((log: any) => ({
-        contact: log.unified_contacts?.display_name || 'Unknown',
-        intent: log.intent_classified || 'N/A',
-        tier: log.model_tier || 'TIER_1',
-        cost: log.estimated_cost_usd?.toFixed(4) || '0.0000',
-        flowId: log.flow_id || '',
-      }));
-      setAiDecisions(aiData);
-
-      const dmsSentToday = dmsRes.count || 0;
-      const convs = conversationsRes.data || [];
-      const conversationsBot = convs.filter((c: any) => c.status === 'BOT').length;
-      const conversationsHuman = convs.filter((c: any) => c.status === 'HUMAN').length;
-      const conversationsRed = convs.filter((c: any) => c.priority_red === true).length;
-
-      setMetrics(prev => ({
-        ...prev,
-        dmsSentToday,
-        conversationsBot,
-        conversationsHuman,
-        conversationsRed,
-      }));
-    });
-  }, [tenant?.id]);
+    if (!brand?.id) return;
+    dashboardApi.get(brand.id).then((data: any) => {
+      if (data?.priorityRedQueue) {
+        const now = new Date();
+        setPriorityRed(data.priorityRedQueue.map((item: any) => ({
+          id: item.conversationId,
+          name: item.contactName || 'Unknown',
+          platform: item.platform,
+          waitingMin: Math.round(item.waitingMinutes || 1),
+        })));
+      }
+      if (data?.metrics) {
+        const m = data.metrics;
+        setMetrics(prev => ({
+          ...prev,
+          dmsSentToday: m.dmsSentToday?.count ?? prev.dmsSentToday,
+          conversationsBot: m.conversations24h?.bot ?? prev.conversationsBot,
+          conversationsHuman: m.conversations24h?.human ?? prev.conversationsHuman,
+          conversationsRed: m.conversations24h?.priorityRed ?? prev.conversationsRed,
+        }));
+      }
+    }).catch(() => null);
+  }, [brand?.id]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -176,21 +130,10 @@ export function DashboardPage() {
       dashboardApi.get(brand.id).catch(() => null),
       healthApi.get(brand.id).catch(() => null),
       flowsApi.list(brand.id).catch(() => []),
-      // Fallback direct queries for data not yet in API
-      supabase.from('ai_audit_logs')
-        .select('id, contact_id, intent_classified, model_tier, estimated_cost_usd, flow_id, unified_contacts(display_name)')
-        .eq('tenant_id', tenant.id)
-        .order('created_at', { ascending: false })
-        .limit(5),
-      supabase.from('attribution_events')
-        .select('event_type, revenue_attributed, created_at')
-        .eq('tenant_id', tenant.id)
-        .gte('created_at', new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()),
-      supabase.from('ai_audit_logs')
-        .select('estimated_cost_usd, kb_chunks_retrieved')
-        .eq('tenant_id', tenant.id)
-        .gte('created_at', new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
-    ]).then(([dashboardData, healthData, flowsData, aiDecisionsRes, activityRes, aiCreditsRes]) => {
+    ]).then(([dashboardData, healthData, flowsData]) => {
+      const aiDecisionsRes = { data: [] };
+      const activityRes = { data: [] };
+      const aiCreditsRes = { data: [] };
       // Set accounts from health API
       if (healthData?.accounts) setAccounts(healthData.accounts);
 

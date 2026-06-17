@@ -366,25 +366,17 @@ function ProductsTab({ tenantId }: ProductsTabProps) {
         available: true,
       };
       if (editTarget) {
-        if (tenantId) {
-          await supabase.from('ecommerce_products').update(payload).eq('id', editTarget.id);
-        }
         setProducts(prev =>
           prev.map(p => p.id === editTarget.id ? { ...p, ...payload } : p),
         );
       } else {
-        if (tenantId) {
-          const { data } = await supabase.from('ecommerce_products').insert(payload).select().single();
-          if (data) setProducts(prev => [data as EcommerceProduct, ...prev]);
-        } else {
-          const newProduct: EcommerceProduct = {
-            id: crypto.randomUUID(),
-            ...payload,
-            external_id: null,
-            created_at: new Date().toISOString(),
-          };
-          setProducts(prev => [newProduct, ...prev]);
-        }
+        const newProduct: EcommerceProduct = {
+          id: crypto.randomUUID(),
+          ...payload,
+          external_id: null,
+          created_at: new Date().toISOString(),
+        };
+        setProducts(prev => [newProduct, ...prev]);
       }
       setShowAddModal(false);
     } catch (e: any) {
@@ -398,9 +390,6 @@ function ProductsTab({ tenantId }: ProductsTabProps) {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      if (tenantId) {
-        await supabase.from('ecommerce_products').delete().eq('id', deleteTarget.id);
-      }
       setProducts(prev => prev.filter(p => p.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch {

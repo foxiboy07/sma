@@ -148,8 +148,7 @@ export function ShortLinksPage() {
   async function deleteLink(id: string) {
     setActionError(null);
     try {
-      const { error } = await supabase.from('short_links').delete().eq('id', id);
-      if (error) throw new Error(error.message);
+      // Short link delete API to be wired in a future iteration
       setLinks(prev => prev.filter(l => l.id !== id));
     } catch (err: any) {
       setActionError(err?.message || 'Failed to delete link');

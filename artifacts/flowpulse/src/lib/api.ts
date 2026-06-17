@@ -116,6 +116,8 @@ export const contactsApi = {
     return restApi(`brands/${brandId}/contacts${qs}`);
   },
   get: (id: string) => restApi(`contacts/${id}`),
+  create: (brandId: string, data: Record<string, unknown>) =>
+    restApi(`brands/${brandId}/contacts`, { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Record<string, unknown>) =>
     restApi(`contacts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   addTags: (id: string, tags: string[]) =>

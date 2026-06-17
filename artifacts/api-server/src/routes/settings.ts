@@ -77,7 +77,13 @@ router.post("/connected-accounts/:id/re-authenticate", requireAuth, async (_req,
 // DELETE /api/connected-accounts/:id
 router.delete("/connected-accounts/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { connectedAccountsTable } = await import("@workspace/db");
+  const { connectedAccountsTable, brandsTable } = await import("@workspace/db");
+  const [account] = await db.select({ brandId: connectedAccountsTable.brandId })
+    .from(connectedAccountsTable).where(eq(connectedAccountsTable.id, id)).limit(1);
+  if (!account) { res.status(404).json({ error: "Not found" }); return; }
+  const [brand] = await db.select({ tenantId: brandsTable.tenantId })
+    .from(brandsTable).where(eq(brandsTable.id, account.brandId)).limit(1);
+  if (!brand || brand.tenantId !== req.user!.tenantId) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.delete(connectedAccountsTable).where(eq(connectedAccountsTable.id, id));
   res.sendStatus(204);
 });
@@ -86,6 +92,9 @@ router.delete("/connected-accounts/:id", requireAuth, async (req, res): Promise<
 router.post("/dlq/:id/replay", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { dlqItemsTable } = await import("@workspace/db");
+  const [item] = await db.select({ tenantId: dlqItemsTable.tenantId })
+    .from(dlqItemsTable).where(eq(dlqItemsTable.id, id)).limit(1);
+  if (!item || item.tenantId !== req.user!.tenantId) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.update(dlqItemsTable).set({ isReplayed: true }).where(eq(dlqItemsTable.id, id));
   res.json({ data: { success: true } });
 });
@@ -93,6 +102,9 @@ router.post("/dlq/:id/replay", requireAuth, async (req, res): Promise<void> => {
 router.post("/dlq/:id/dismiss", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { dlqItemsTable } = await import("@workspace/db");
+  const [item] = await db.select({ tenantId: dlqItemsTable.tenantId })
+    .from(dlqItemsTable).where(eq(dlqItemsTable.id, id)).limit(1);
+  if (!item || item.tenantId !== req.user!.tenantId) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.update(dlqItemsTable).set({ isDismissed: true }).where(eq(dlqItemsTable.id, id));
   res.json({ data: { success: true } });
 });
@@ -104,15 +116,24 @@ router.post("/brands/:id/dlq/batch-replay", requireAuth, async (_req, res): Prom
 // KB routes
 router.get("/knowledge-base/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { kbDocumentsTable } = await import("@workspace/db");
+  const { kbDocumentsTable, brandsTable } = await import("@workspace/db");
   const [doc] = await db.select().from(kbDocumentsTable).where(eq(kbDocumentsTable.id, id)).limit(1);
   if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+  const [brand] = await db.select({ tenantId: brandsTable.tenantId })
+    .from(brandsTable).where(eq(brandsTable.id, doc.brandId)).limit(1);
+  if (!brand || brand.tenantId !== req.user!.tenantId) { res.status(403).json({ error: "Forbidden" }); return; }
   res.json({ data: doc });
 });
 
 router.delete("/knowledge-base/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { kbDocumentsTable } = await import("@workspace/db");
+  const { kbDocumentsTable, brandsTable } = await import("@workspace/db");
+  const [doc] = await db.select({ brandId: kbDocumentsTable.brandId })
+    .from(kbDocumentsTable).where(eq(kbDocumentsTable.id, id)).limit(1);
+  if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+  const [brand] = await db.select({ tenantId: brandsTable.tenantId })
+    .from(brandsTable).where(eq(brandsTable.id, doc.brandId)).limit(1);
+  if (!brand || brand.tenantId !== req.user!.tenantId) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.delete(kbDocumentsTable).where(eq(kbDocumentsTable.id, id));
   res.sendStatus(204);
 });
