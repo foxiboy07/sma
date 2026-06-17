@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { setApiSessionToken } from '../lib/api';
 import { Tenant, Brand } from '../types';
 
 interface AuthState {
@@ -23,12 +24,14 @@ export function useAuth() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setState(prev => ({ ...prev, session, user: session?.user ?? null }));
+      setApiSessionToken(session?.access_token ?? null);
       if (session?.user) loadTenantData(session.user.id);
       else setState(prev => ({ ...prev, loading: false }));
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       setState(prev => ({ ...prev, session, user: session?.user ?? null }));
+      setApiSessionToken(session?.access_token ?? null);
       if (session?.user) {
         (async () => { await loadTenantData(session.user.id); })();
       } else {

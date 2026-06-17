@@ -12,6 +12,7 @@ import {
 import { Button, Card, Input, Select, Toggle, Badge, Modal, Skeleton } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
+import { brandsApi, settingsApi } from '../lib/api';
 import { TeamMember } from '../types';
 
 // ─── Nav ────────────────────────────────────────────────────────────────────
@@ -178,7 +179,7 @@ export function GeneralSettings() {
     if (!brand) return;
     setSavingBrand(true);
     setSavedBrand(false);
-    await supabase.from('brands').update({ name: brandName, timezone, logo_url: logoUrl || null }).eq('id', brand.id);
+    await brandsApi.update(brand.id, { name: brandName, timezone, logoUrl: logoUrl || null });
     setSavingBrand(false);
     setSavedBrand(true);
     setTimeout(() => setSavedBrand(false), 3000);
@@ -575,7 +576,7 @@ export function TeamSettings() {
   async function fetchMembers() {
     if (!tenant) return;
     setLoading(true);
-    const { data } = await supabase.from('team_members').select('*').eq('tenant_id', tenant.id).order('created_at', { ascending: true });
+    const data = await settingsApi.team.list(tenant.id);
     setMembers(data || []);
     setLoading(false);
   }
@@ -594,11 +595,13 @@ export function TeamSettings() {
   }
 
   async function removeMember(id: string) {
-    await supabase.from('team_members').delete().eq('id', id);
+    await settingsApi.team.remove(tenant!.id, id);
     setMembers(prev => prev.filter(m => m.id !== id));
   }
 
   async function changeRole(id: string, role: TeamMember['role']) {
+    // TODO: Add API endpoint for updating team member role
+    // For now, keep using supabase until API is available
     await supabase.from('team_members').update({ role }).eq('id', id);
     setMembers(prev => prev.map(m => m.id === id ? { ...m, role } : m));
   }
@@ -1067,19 +1070,24 @@ export function AISettings() {
     setSaving(true);
     setSaved(false);
     setSaveError('');
-    const { error } = await supabase.from('brands').update({
-      persona_name: personaName,
-      persona_tone: personaTone,
-      persona_language: personaLanguage,
-      persona_forbidden_topics: forbiddenTopics,
-      ai_monthly_budget_usd: budgetCap,
-      ai_budget_alert_pct: alertThreshold,
-      ai_tier1_model: tier1Model,
-      ai_tier2_model: tier2Model,
-    }).eq('id', brand.id);
-    setSaving(false);
-    if (error) setSaveError(error.message);
-    else { setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    try {
+      await brandsApi.update(brand.id, {
+        personaName,
+        personaTone,
+        personaLanguage,
+        forbiddenTopics,
+        aiMonthlyCapUsd: budgetCap,
+        // Note: alertThreshold may need to be stored differently or in a separate setting
+        aiTier1Model: tier1Model,
+        aiTier2Model: tier2Model,
+      });
+      setSaving(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      setSaving(false);
+      setSaveError(error instanceof Error ? error.message : 'Failed to save settings');
+    }
   }
 
   const LANGUAGE_LABELS: Record<string, string> = { en: 'English', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', ja: 'Japanese' };

@@ -5,7 +5,7 @@ import { Button, Badge, LoyaltyBadge, PlatformIcon, EmptyState, Card, Modal } fr
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { loyaltyApi } from '../lib/api';
+import { loyaltyApi, contactsApi } from '../lib/api';
 
 interface ContactRow {
   id: string;
@@ -153,20 +153,16 @@ export function ContactsPage() {
   }, [tenant]);
 
   async function loadContacts() {
-    if (!tenant) return;
+    if (!tenant || !brand) return;
     setLoading(true);
 
     try {
-      // Fetch unified_contacts where tenant_id matches and gdpr_deleted_at is null
-      const { data: rows, error } = await supabase
-        .from('unified_contacts')
-        .select('id, display_name, email, phone, loyalty_score, loyalty_tier, tags, sentiment_score, created_at')
-        .eq('tenant_id', tenant.id)
-        .is('gdpr_deleted_at', null);
+      // Use the REST API to fetch contacts
+      const response = await contactsApi.list(brand.id, {});
 
-      if (error) throw error;
-      if (!rows) { setContacts([]); setLoading(false); return; }
+      if (!response || !response.data) { setContacts([]); setLoading(false); return; }
 
+      const rows = response.data;
       const contactIds = rows.map((r: any) => r.id);
 
       // Fetch platform_profiles for all contacts
@@ -216,17 +212,19 @@ export function ContactsPage() {
       // Assemble contact rows
       const assembled: ContactRow[] = rows.map((r: any) => {
         const pInfo = profileMap.get(r.id);
-        const lastInteraction = pInfo?.lastInteraction || new Date(r.created_at);
+        // API returns camelCase: createdAt instead of created_at
+        const createdAt = r.createdAt || r.created_at || new Date();
+        const lastInteraction = pInfo?.lastInteraction || new Date(createdAt);
         return {
           id: r.id,
-          name: r.display_name || 'Unknown',
+          name: r.displayName || r.display_name || 'Unknown',
           email: r.email,
           phone: r.phone,
-          tier: r.loyalty_tier || 'NEWBIE',
-          score: r.loyalty_score || 0,
+          tier: r.loyaltyTier || r.loyalty_tier || 'NEWBIE',
+          score: r.loyaltyScore || r.loyalty_score || 0,
           platforms: pInfo?.platforms || [],
           tags: r.tags || [],
-          sentiment: Number(r.sentiment_score) || 0,
+          sentiment: Number(r.sentimentScore || r.sentiment_score) || 0,
           lastInteraction,
           conversations: convCountMap.get(r.id) || 0,
           revenue: revenueMap.get(r.id) || 0,
@@ -248,14 +246,10 @@ export function ContactsPage() {
   async function loadDuplicateCount() {
     if (!tenant || !brand) return;
     try {
-      const { count, error } = await supabase
-        .from('identity_match_queue')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant.id)
-        .eq('brand_id', brand.id)
-        .eq('status', 'PENDING');
-      if (!error && count !== null) {
-        setDuplicateCount(count);
+      // Use the REST API to get identity match queue
+      const response = await contactsApi.identityMatches(brand.id);
+      if (response && Array.isArray(response)) {
+        setDuplicateCount(response.length);
       }
     } catch {
       // silently ignore

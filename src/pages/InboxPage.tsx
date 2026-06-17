@@ -9,8 +9,7 @@ import {
 import { Badge, Toggle, LoyaltyBadge, PlatformIcon } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { aiApi } from '../lib/api';
-import { gdprApi } from '../lib/api';
+import { aiApi, gdprApi, inboxApi } from '../lib/api';
 
 interface ConvRow {
   id: string;
@@ -216,10 +215,7 @@ export function InboxPage() {
   async function assignToAgent(agentId: string | null) {
     if (!activeConv) return;
     try {
-      await supabase
-        .from('conversations')
-        .update({ assigned_agent_id: agentId })
-        .eq('id', activeConv.id);
+      await inboxApi.updateConversation(activeConv.id, { assignedAgentId: agentId });
       setAssignedAgent(agentId);
     } catch (err) {
       console.error('Failed to assign agent:', err);
@@ -270,17 +266,9 @@ export function InboxPage() {
     if (!activeConv || !tenantId || !brandId || sendingProduct) return;
     setSendingProduct(true);
     try {
-      const { error } = await supabase.from('messages').insert({
-        conversation_id: activeConv.id,
-        tenant_id: tenantId,
-        direction: 'OUTBOUND',
-        content: JSON.stringify({ product_id: product.id, title: product.title, price: product.price, image_url: product.image_url }),
-        message_type: 'PRODUCT_CARD',
-        delivery_status: 'QUEUED',
-        is_ai_generated: false,
-        ai_token_cost: 0,
-      });
-      if (!error) setShowProductModal(false);
+      const productContent = JSON.stringify({ product_id: product.id, title: product.title, price: product.price, image_url: product.image_url });
+      await inboxApi.sendMessage(activeConv.id, productContent, 'PRODUCT_CARD');
+      setShowProductModal(false);
     } catch (err) {
       console.error('Failed to send product card:', err);
     } finally {
@@ -295,28 +283,22 @@ export function InboxPage() {
 
     async function fetchConversations() {
       setConversationsLoading(true);
-      const { data, error } = await supabase
-        .from('conversations')
-        .select(`
-          id, platform, status, last_message_at, sentiment_score,
-          priority_red, unread_count, unified_contact_id, brand_id, tenant_id,
-          unified_contacts ( display_name, loyalty_tier )
-        `)
-        .eq('tenant_id', tenantId)
-        .order('last_message_at', { ascending: false });
-
-      if (!cancelled) {
-        if (error) {
-          console.error('Failed to fetch conversations:', error);
-        } else {
+      try {
+        const data = await inboxApi.conversations(tenantId, { limit: 100 });
+        if (!cancelled) {
           const rows = (data || []) as unknown as ConvRow[];
           setConversations(rows);
           // Auto-select first conversation if none active
           if (rows.length > 0 && !activeConv) {
             setActiveConv(rows[0]);
           }
+          setConversationsLoading(false);
         }
-        setConversationsLoading(false);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to fetch conversations:', error);
+          setConversationsLoading(false);
+        }
       }
     }
 
@@ -348,19 +330,17 @@ export function InboxPage() {
 
     async function fetchMessages() {
       setMessagesLoading(true);
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, direction, content, message_type, is_ai_generated, delivery_status, created_at')
-        .eq('conversation_id', activeConv!.id)
-        .order('created_at', { ascending: true });
-
-      if (!cancelled) {
-        if (error) {
-          console.error('Failed to fetch messages:', error);
-        } else {
+      try {
+        const data = await inboxApi.messages(activeConv!.id, undefined, 100);
+        if (!cancelled) {
           setMessages((data || []) as MessageRow[]);
+          setMessagesLoading(false);
         }
-        setMessagesLoading(false);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to fetch messages:', error);
+          setMessagesLoading(false);
+        }
       }
     }
 
@@ -522,18 +502,7 @@ export function InboxPage() {
     setSending(true);
 
     try {
-      const { error } = await supabase.from('messages').insert({
-        conversation_id: activeConv.id,
-        tenant_id: tenantId,
-        direction: 'OUTBOUND',
-        content,
-        message_type: 'TEXT',
-        delivery_status: 'QUEUED',
-        is_ai_generated: false,
-        ai_token_cost: 0,
-      });
-
-      if (error) throw error;
+      await inboxApi.sendMessage(activeConv.id, content, 'TEXT');
     } catch (err) {
       console.error('Failed to send message:', err);
       setMessageInput(content); // Restore on failure
@@ -619,12 +588,7 @@ export function InboxPage() {
 
     const newStatus = checked ? 'HUMAN' : 'BOT';
     try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({ status: newStatus })
-        .eq('id', activeConv.id);
-
-      if (error) throw error;
+      await inboxApi.updateConversation(activeConv.id, { status: newStatus });
 
       // Update local state
       setActiveConv(prev => prev ? { ...prev, status: newStatus } : prev);

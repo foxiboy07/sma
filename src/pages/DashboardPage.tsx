@@ -11,6 +11,7 @@ import {
 import { MetricCard, Card, Badge, Button, PlatformIcon, LoyaltyBadge, Skeleton } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
 import { useNotificationsRealtime } from '../hooks/useRealtime';
+import { dashboardApi, healthApi, flowsApi } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { ConnectedAccount, Flow } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -166,90 +167,65 @@ export function DashboardPage() {
   );
 
   useEffect(() => {
-    if (!tenant?.id) { setLoading(false); return; }
+    if (!tenant?.id || !brand?.id) { setLoading(false); return; }
 
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
+    // Load dashboard data via REST API
     Promise.all([
-      // Connected accounts
-      supabase.from('connected_accounts').select('*').eq('tenant_id', tenant.id).limit(5),
-
-      // All flows (active + paused) for metrics
-      supabase.from('flows').select('*').eq('tenant_id', tenant.id).in('status', ['ACTIVE', 'PAUSED']),
-
-      // Priority Red conversations
-      supabase
-        .from('conversations')
-        .select('id, platform, created_at, unified_contacts(display_name)')
-        .eq('tenant_id', tenant.id)
-        .eq('priority_red', true)
-        .neq('status', 'CLOSED')
-        .order('created_at', { ascending: true })
-        .limit(5),
-
-      // AI audit logs
-      supabase
-        .from('ai_audit_logs')
+      dashboardApi.get(brand.id).catch(() => null),
+      healthApi.get(brand.id).catch(() => null),
+      flowsApi.list(brand.id).catch(() => []),
+      // Fallback direct queries for data not yet in API
+      supabase.from('ai_audit_logs')
         .select('id, contact_id, intent_classified, model_tier, estimated_cost_usd, flow_id, unified_contacts(display_name)')
         .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false })
         .limit(5),
-
-      // Activity chart: attribution events grouped by hour (last 24h)
-      supabase
-        .from('attribution_events')
+      supabase.from('attribution_events')
         .select('event_type, revenue_attributed, created_at')
         .eq('tenant_id', tenant.id)
-        .gte('created_at', twentyFourHoursAgo),
-
-      // DMs sent today
-      supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant.id)
-        .eq('direction', 'OUTBOUND')
-        .gte('created_at', todayStart),
-
-      // Conversations in last 24h by status
-      supabase
-        .from('conversations')
-        .select('status, priority_red')
-        .eq('tenant_id', tenant.id)
-        .gte('last_message_at', twentyFourHoursAgo),
-
-      // AI audit logs this month for credits saved
-      supabase
-        .from('ai_audit_logs')
+        .gte('created_at', new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()),
+      supabase.from('ai_audit_logs')
         .select('estimated_cost_usd, kb_chunks_retrieved')
         .eq('tenant_id', tenant.id)
-        .gte('created_at', monthStart),
-    ]).then(([
-      accRes, flowRes, priorityRedRes, aiDecisionsRes, activityRes,
-      dmsRes, conversationsRes, aiCreditsRes,
-    ]) => {
-      setAccounts(accRes.data || []);
+        .gte('created_at', new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
+    ]).then(([dashboardData, healthData, flowsData, aiDecisionsRes, activityRes, aiCreditsRes]) => {
+      // Set accounts from health API
+      if (healthData?.accounts) setAccounts(healthData.accounts);
 
-      const allFlows = flowRes.data || [];
-      setFlows(allFlows.filter(f => f.status === 'ACTIVE'));
+      // Set flows
+      const allFlows = flowsData || [];
+      setFlows(allFlows.filter((f: any) => f.status === 'ACTIVE'));
 
-      // Priority Red
-      const prData = (priorityRedRes.data || []).map((c: any) => {
-        const created = c.created_at ? new Date(c.created_at) : now;
-        const waitingMin = Math.max(1, Math.round((now.getTime() - created.getTime()) / 60000));
-        return {
-          id: c.id,
-          name: c.unified_contacts?.display_name || 'Unknown',
-          platform: c.platform,
-          waitingMin,
-        };
-      });
-      setPriorityRed(prData);
+      // Priority Red from dashboard API
+      if (dashboardData?.priorityRedQueue) {
+        setPriorityRed(dashboardData.priorityRedQueue.map((item: any) => ({
+          id: item.conversationId,
+          name: item.contactName || 'Unknown',
+          platform: item.platform,
+          waitingMin: Math.round(item.waitingMinutes || 1),
+        })));
+      }
 
-      // AI Decisions
-      const aiData = (aiDecisionsRes.data || []).map((log: any) => ({
+      // Metrics from dashboard API
+      if (dashboardData?.metrics) {
+        const m = dashboardData.metrics;
+        setMetrics(prev => ({
+          ...prev,
+          dmsSentToday: m.dmsSentToday?.count ?? prev.dmsSentToday,
+          activeFlows: m.activeFlows?.count ?? prev.activeFlows,
+          pausedFlows: m.activeFlows?.pausedCount ?? prev.pausedFlows,
+          conversationsBot: m.conversations24h?.bot ?? prev.conversationsBot,
+          conversationsHuman: m.conversations24h?.human ?? prev.conversationsHuman,
+          conversationsRed: m.conversations24h?.priorityRed ?? prev.conversationsRed,
+          aiCreditsSaved: `$${(m.aiCreditsSaved?.amountUsd ?? 0).toFixed(2)}`,
+          cacheHitRate: `${Math.round((m.aiCreditsSaved?.cacheHitRate ?? 0) * 100)}% cache hit rate`,
+        }));
+      }
+
+      // AI Decisions (fallback direct query)
+      const aiData = (aiDecisionsRes?.data || []).map((log: any) => ({
         contact: log.unified_contacts?.display_name || 'Unknown',
         intent: log.intent_classified || 'N/A',
         tier: log.model_tier || 'TIER_1',
@@ -258,14 +234,14 @@ export function DashboardPage() {
       }));
       setAiDecisions(aiData);
 
-      // Activity chart: group attribution events by hour
+      // Activity chart
       const hourMap: Record<string, { messages: number; purchases: number; revenue: number }> = {};
       for (let i = 0; i < 24; i++) {
         const hourStart = new Date(now.getTime() - (23 - i) * 60 * 60 * 1000);
         const label = `${hourStart.getHours()}:00`;
         hourMap[label] = { messages: 0, purchases: 0, revenue: 0 };
       }
-      (activityRes.data || []).forEach((ev: any) => {
+      (activityRes?.data || []).forEach((ev: any) => {
         const evDate = new Date(ev.created_at);
         const label = `${evDate.getHours()}:00`;
         if (hourMap[label]) {
@@ -284,21 +260,8 @@ export function DashboardPage() {
       }));
       setActivity(activityData);
 
-      // Metrics: DMs sent today
-      const dmsSentToday = dmsRes.count || 0;
-
-      // Metrics: Flows
-      const activeFlows = allFlows.filter(f => f.status === 'ACTIVE').length;
-      const pausedFlows = allFlows.filter(f => f.status === 'PAUSED').length;
-
-      // Metrics: Conversations (24h)
-      const convs = conversationsRes.data || [];
-      const conversationsBot = convs.filter((c: any) => c.status === 'BOT').length;
-      const conversationsHuman = convs.filter((c: any) => c.status === 'HUMAN').length;
-      const conversationsRed = convs.filter((c: any) => c.priority_red === true).length;
-
-      // Metrics: AI Credits Saved
-      const aiLogs = aiCreditsRes.data || [];
+      // AI Credits Saved (fallback direct query)
+      const aiLogs = aiCreditsRes?.data || [];
       const totalCost = aiLogs.reduce((sum: number, log: any) => sum + (log.estimated_cost_usd || 0), 0);
       const cacheHits = aiLogs.filter((log: any) =>
         log.kb_chunks_retrieved && Array.isArray(log.kb_chunks_retrieved) && log.kb_chunks_retrieved.length > 0
@@ -306,22 +269,18 @@ export function DashboardPage() {
       const cacheHitRate = aiLogs.length > 0 ? Math.round((cacheHits / aiLogs.length) * 100) : 0;
       const flatRateCost = aiLogs.length * 0.015;
       const savings = Math.max(0, flatRateCost - totalCost);
-
-      setMetrics({
-        dmsSentToday,
-        activeFlows,
-        pausedFlows,
-        conversationsBot,
-        conversationsHuman,
-        conversationsRed,
-        aiCreditsSaved: `$${savings.toFixed(2)}`,
-        cacheHitRate: `${cacheHitRate}% cache hit rate`,
-      });
+      if (!dashboardData?.metrics) {
+        setMetrics(prev => ({
+          ...prev,
+          aiCreditsSaved: `$${savings.toFixed(2)}`,
+          cacheHitRate: `${cacheHitRate}% cache hit rate`,
+        }));
+      }
 
       setLoading(false);
       setLastRefreshed(new Date());
     });
-  }, [tenant?.id]);
+  }, [tenant?.id, brand?.id]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';

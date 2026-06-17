@@ -25,13 +25,248 @@ async function apiCall(service: string, path: string, options: RequestInit = {})
   return res.json();
 }
 
-// ---- Webhook Ingressor ----
+// ─── UNIFIED REST API (Section 5 contract) ─────────────────
+
+let cachedSessionToken: string | null = null;
+
+export function setApiSessionToken(token: string | null) {
+  cachedSessionToken = token;
+}
+
+async function restApi(path: string, options: RequestInit = {}): Promise<any> {
+  const token = cachedSessionToken;
+  const url = `${SUPABASE_URL}/functions/v1/api/${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'apikey': SUPABASE_ANON_KEY,
+      ...(options.headers || {}),
+    },
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const errMsg = body?.error || body?.code || `API error: ${res.status}`;
+    const err: any = new Error(errMsg);
+    err.code = body?.code;
+    err.status = res.status;
+    err.retryable = body?.retryable;
+    throw err;
+  }
+  return body?.data ?? body;
+}
+
+// ─── BRANDS API (Section 5.1) ──────────────────────────────
+
+export const brandsApi = {
+  list: () => restApi('brands'),
+  get: (id: string) => restApi(`brands/${id}`),
+  create: (data: { name: string; timezone?: string; logoUrl?: string }) =>
+    restApi('brands', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, unknown>) =>
+    restApi(`brands/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+};
+
+// ─── CONNECTED ACCOUNTS API (Section 5.2) ─────────────────
+
+export const connectedAccountsApi = {
+  list: (brandId: string) => restApi(`brands/${brandId}/connected-accounts`),
+  forceRefresh: (id: string) => restApi(`connected-accounts/${id}/force-refresh`, { method: 'POST' }),
+  reAuthenticate: (id: string) => restApi(`connected-accounts/${id}/re-authenticate`, { method: 'POST' }),
+  delete: (id: string) => restApi(`connected-accounts/${id}`, { method: 'DELETE' }),
+};
+
+// ─── FLOWS API (Section 5.3) ──────────────────────────────
+
+export const flowsApi = {
+  list: (brandId: string, params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return restApi(`brands/${brandId}/flows${qs}`);
+  },
+  get: (id: string) => restApi(`flows/${id}`),
+  create: (brandId: string, data: { name: string; triggerType?: string; templateId?: string }) =>
+    restApi(`brands/${brandId}/flows`, { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, unknown>) =>
+    restApi(`flows/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  saveNodes: (id: string, nodes: any[], edges: any[]) =>
+    restApi(`flows/${id}/nodes`, { method: 'PUT', body: JSON.stringify({ nodes, edges }) }),
+  publish: (id: string) => restApi(`flows/${id}/publish`, { method: 'POST' }),
+  pause: (id: string) => restApi(`flows/${id}/pause`, { method: 'POST' }),
+  duplicate: (id: string) => restApi(`flows/${id}/duplicate`, { method: 'POST' }),
+  archive: (id: string) => restApi(`flows/${id}`, { method: 'DELETE' }),
+  validate: (id: string) => restApi(`flows/${id}/validate`, { method: 'POST' }),
+};
+
+// ─── INBOX API (Section 5.4) ──────────────────────────────
+
+export const inboxApi = {
+  conversations: (brandId: string, params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return restApi(`brands/${brandId}/conversations${qs}`);
+  },
+  conversation: (id: string) => restApi(`conversations/${id}`),
+  messages: (conversationId: string, before?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (before) params.set('before', before);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString() ? '?' + params.toString() : '';
+    return restApi(`conversations/${conversationId}${qs}`);
+  },
+  sendMessage: (conversationId: string, content: string, messageType?: string) =>
+    restApi(`conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content, messageType: messageType || 'TEXT' }),
+    }),
+  updateConversation: (id: string, data: { status?: string; assignedAgentId?: string; priorityRed?: boolean }) =>
+    restApi(`conversations/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  aiSuggest: (conversationId: string, context?: string) =>
+    restApi(`conversations/${conversationId}/ai-suggest`, {
+      method: 'POST',
+      body: JSON.stringify({ context }),
+    }),
+};
+
+// ─── CONTACTS API (Section 5.5) ───────────────────────────
+
+export const contactsApi = {
+  list: (brandId: string, params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return restApi(`brands/${brandId}/contacts${qs}`);
+  },
+  get: (id: string) => restApi(`contacts/${id}`),
+  update: (id: string, data: Record<string, unknown>) =>
+    restApi(`contacts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addTags: (id: string, tags: string[]) =>
+    restApi(`contacts/${id}/tags`, { method: 'POST', body: JSON.stringify({ tags }) }),
+  removeTags: (id: string, tags: string[]) =>
+    restApi(`contacts/${id}/tags`, { method: 'DELETE', body: JSON.stringify({ tags }) }),
+  merge: (contactAId: string, contactBId: string, keepId: string) =>
+    restApi('contacts/merge', { method: 'POST', body: JSON.stringify({ contactAId, contactBId, keepId }) }),
+  identityMatches: (brandId: string) => restApi(`brands/${brandId}/identity-matches`),
+  dismissMatch: (id: string) => restApi(`identity-matches/${id}/dismiss`, { method: 'POST' }),
+  mergeMatch: (id: string, keepId: string) =>
+    restApi(`identity-matches/${id}/merge`, { method: 'POST', body: JSON.stringify({ keepId }) }),
+  gdprExport: (id: string) => restApi(`contacts/${id}/export`),
+  gdprDelete: (id: string) =>
+    restApi(`contacts/${id}/data`, { method: 'DELETE', body: JSON.stringify({ confirmation: 'DELETE' }) }),
+};
+
+// ─── BROADCASTS API (Section 5.6) ─────────────────────────
+
+export const broadcastsApi = {
+  list: (brandId: string, params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return restApi(`brands/${brandId}/broadcasts${qs}`);
+  },
+  create: (brandId: string, data: Record<string, unknown>) =>
+    restApi(`brands/${brandId}/broadcasts`, { method: 'POST', body: JSON.stringify(data) }),
+  estimateReach: (id: string, audienceFilters: any[]) =>
+    restApi(`broadcasts/${id}/estimate-reach`, { method: 'POST', body: JSON.stringify({ audienceFilters }) }),
+  delete: (id: string) => restApi(`broadcasts/${id}`, { method: 'DELETE' }),
+};
+
+// ─── ANALYTICS API (Section 5.7) ──────────────────────────
+
+export const analyticsApi = {
+  overview: (brandId: string, period?: string, platform?: string) => {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    if (platform) params.set('platform', platform);
+    return restApi(`brands/${brandId}/analytics/overview?${params.toString()}`);
+  },
+  flows: (brandId: string, period?: string) => {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    return restApi(`brands/${brandId}/analytics/flows?${params.toString()}`);
+  },
+  ai: (brandId: string, period?: string) => {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    return restApi(`brands/${brandId}/analytics/ai?${params.toString()}`);
+  },
+  attribution: (brandId: string, period?: string) => {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    return restApi(`brands/${brandId}/analytics/attribution?${params.toString()}`);
+  },
+  ghostAb: (brandId: string, period?: string) => {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    return restApi(`brands/${brandId}/analytics/ghost-ab?${params.toString()}`);
+  },
+};
+
+// ─── DASHBOARD API (Section 5.8) ──────────────────────────
+
+export const dashboardApi = {
+  get: (brandId: string) => restApi(`brands/${brandId}/dashboard`),
+};
+
+// ─── KNOWLEDGE BASE API (Section 5.9) ─────────────────────
+
+export const knowledgeBaseApi = {
+  list: (brandId: string) => restApi(`brands/${brandId}/knowledge-base`),
+  get: (id: string) => restApi(`knowledge-base/${id}`),
+  delete: (id: string) => restApi(`knowledge-base/${id}`, { method: 'DELETE' }),
+};
+
+// ─── SHORT LINKS API (Section 5.10) ───────────────────────
+
+export const shortLinksApi = {
+  list: (brandId: string) => restApi(`brands/${brandId}/short-links`),
+  create: (brandId: string, data: { destinationUrl: string; contactId?: string; flowId?: string; customSlug?: string }) =>
+    restApi(`brands/${brandId}/short-links`, { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// ─── DLQ API (Section 5.11) ───────────────────────────────
+
+export const dlqApi = {
+  list: (brandId: string, params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return restApi(`brands/${brandId}/dlq${qs}`);
+  },
+  replay: (id: string) => restApi(`dlq/${id}/replay`, { method: 'POST' }),
+  dismiss: (id: string) => restApi(`dlq/${id}/dismiss`, { method: 'POST' }),
+  batchReplay: (brandId: string, messageIds?: string[]) =>
+    restApi(`brands/${brandId}/dlq/batch-replay`, { method: 'POST', body: JSON.stringify({ messageIds }) }),
+};
+
+// ─── TOKEN HEALTH API (Section 5.12) ──────────────────────
+
+export const healthApi = {
+  get: (brandId: string) => restApi(`brands/${brandId}/health`),
+};
+
+// ─── SETTINGS API (Section 5.13) ──────────────────────────
+
+export const settingsApi = {
+  team: {
+    list: (tenantId: string) => restApi(`tenants/${tenantId}/users`),
+    invite: (tenantId: string, email: string, role: string) =>
+      restApi(`tenants/${tenantId}/invites`, { method: 'POST', body: JSON.stringify({ email, role }) }),
+    remove: (tenantId: string, userId: string) =>
+      restApi(`tenants/${tenantId}/users/${userId}`, { method: 'DELETE' }),
+  },
+  billing: {
+    get: (tenantId: string) => restApi(`tenants/${tenantId}/billing`),
+  },
+  apiKeys: {
+    list: (tenantId: string) => restApi(`tenants/${tenantId}/api-keys`),
+    create: (tenantId: string, name: string, scopes?: string[]) =>
+      restApi(`tenants/${tenantId}/api-keys`, { method: 'POST', body: JSON.stringify({ name, scopes }) }),
+    revoke: (tenantId: string, keyId: string) =>
+      restApi(`tenants/${tenantId}/api-keys/${keyId}`, { method: 'DELETE' }),
+  },
+};
+
+// ─── LEGACY EDGE FUNCTION APIs (internal services) ─────────
+
 export const webhookApi = {
   metaVerify: (mode: string, token: string, challenge: string) =>
     apiCall('webhook-ingressor', `/meta?hub.mode=${mode}&hub.verify_token=${token}&hub.challenge=${challenge}`),
 };
 
-// ---- Token Vault ----
 export const tokenVaultApi = {
   encrypt: (accountId: string, accessToken: string, refreshToken?: string) =>
     apiCall('token-vault', '/encrypt', { method: 'POST', body: JSON.stringify({ account_id: accountId, access_token: accessToken, refresh_token: refreshToken }) }),
@@ -45,7 +280,6 @@ export const tokenVaultApi = {
     apiCall('token-vault', '/force-refresh', { method: 'POST', body: JSON.stringify({ account_id: accountId }) }),
 };
 
-// ---- OAuth Onboarding ----
 export const oauthApi = {
   metaAuthorizeUrl: (tenantId: string, brandId: string) =>
     apiCall('oauth-onboarding', `/meta/authorize?tenant_id=${tenantId}&brand_id=${brandId}`),
@@ -57,7 +291,6 @@ export const oauthApi = {
     apiCall('oauth-onboarding', '/test-webhook', { method: 'POST', body: JSON.stringify({ account_id: accountId }) }),
 };
 
-// ---- Flow Engine ----
 export const flowEngineApi = {
   execute: (sessionId: string) =>
     apiCall('flow-engine', '/execute', { method: 'POST', body: JSON.stringify({ session_id: sessionId }) }),
@@ -71,7 +304,6 @@ export const flowEngineApi = {
     apiCall('flow-engine', '/check-window', { method: 'POST', body: JSON.stringify({ contact_id: contactId, platform, brand_id: brandId, has_message_tag: hasMessageTag }) }),
 };
 
-// ---- AI Layer ----
 export const aiApi = {
   classify: (messageText: string, conversationId: string, contactId: string, tenantId: string, brandId: string) =>
     apiCall('ai-layer', '/classify', { method: 'POST', body: JSON.stringify({ message_text: messageText, conversation_id: conversationId, contact_id: contactId, tenant_id: tenantId, brand_id: brandId }) }),
@@ -83,7 +315,6 @@ export const aiApi = {
     apiCall('ai-layer', `/budget?tenant_id=${tenantId}&brand_id=${brandId}`),
 };
 
-// ---- Circuit Breaker ----
 export const circuitBreakerApi = {
   check: (accountId: string) =>
     apiCall('circuit-breaker', '/check', { method: 'POST', body: JSON.stringify({ account_id: accountId }) }),
@@ -95,7 +326,6 @@ export const circuitBreakerApi = {
     apiCall('circuit-breaker', `/status?tenant_id=${tenantId}`),
 };
 
-// ---- Attribution ----
 export const attributionApi = {
   createShortLink: (tenantId: string, brandId: string, destinationUrl: string, contactId?: string, flowId?: string, customDomain?: string) =>
     apiCall('attribution', '/short-link', { method: 'POST', body: JSON.stringify({ tenant_id: tenantId, brand_id: brandId, destination_url: destinationUrl, contact_id: contactId, flow_id: flowId, custom_domain: customDomain }) }),
@@ -107,21 +337,6 @@ export const attributionApi = {
     apiCall('attribution', '/bio-click', { method: 'POST', body: JSON.stringify({ tenant_id: tenantId, brand_id: brandId, contact_id: contactId }) }),
 };
 
-// ---- DLQ Replay ----
-export const dlqApi = {
-  messages: (tenantId: string, status?: string, platform?: string, limit?: number) =>
-    apiCall('dlq-replay', `/messages?tenant_id=${tenantId}${status ? `&status=${status}` : ''}${platform ? `&platform=${platform}` : ''}${limit ? `&limit=${limit}` : ''}`),
-  replay: (messageId: string) =>
-    apiCall('dlq-replay', `/replay/${messageId}`, { method: 'POST' }),
-  batchReplay: (tenantId: string, fromDate?: string, toDate?: string, errorCode?: string) =>
-    apiCall('dlq-replay', '/batch-replay', { method: 'POST', body: JSON.stringify({ tenant_id: tenantId, from_date: fromDate, to_date: toDate, error_code: errorCode }) }),
-  dismiss: (messageId: string) =>
-    apiCall('dlq-replay', `/dismiss/${messageId}`, { method: 'POST' }),
-  stats: (tenantId: string) =>
-    apiCall('dlq-replay', `/stats?tenant_id=${tenantId}`),
-};
-
-// ---- GDPR Compliance ----
 export const gdprApi = {
   exportContact: (contactId: string, tenantId: string, brandId: string) =>
     apiCall('gdpr-compliance', '/export', { method: 'POST', body: JSON.stringify({ contact_id: contactId, tenant_id: tenantId, brand_id: brandId }) }),
@@ -135,7 +350,6 @@ export const gdprApi = {
     apiCall('gdpr-compliance', `/compliance-status?tenant_id=${tenantId}`),
 };
 
-// ---- Knowledge Base ----
 export const kbApi = {
   upload: (tenantId: string, brandId: string, name: string, sourceType: string, content: string, sourceUrl?: string, strictness?: string) =>
     apiCall('knowledge-base', '/upload', { method: 'POST', body: JSON.stringify({ tenant_id: tenantId, brand_id: brandId, name, source_type: sourceType, content, source_url: sourceUrl, strictness }) }),
@@ -149,7 +363,6 @@ export const kbApi = {
     apiCall('knowledge-base', `/documents/${docId}`, { method: 'DELETE' }),
 };
 
-// ---- Loyalty Scoring ----
 export const loyaltyApi = {
   compute: (contactId: string, tenantId: string, brandId: string) =>
     apiCall('loyalty-scoring', '/compute', { method: 'POST', body: JSON.stringify({ contact_id: contactId, tenant_id: tenantId, brand_id: brandId }) }),
@@ -163,7 +376,6 @@ export const loyaltyApi = {
     apiCall('loyalty-scoring', '/warm-hello', { method: 'POST', body: JSON.stringify({ contact_id: contactId, tenant_id: tenantId, brand_id: brandId }) }),
 };
 
-// ---- Broadcast Engine ----
 export const broadcastApi = {
   create: (tenantId: string, brandId: string, name: string, platform?: string, messageContent?: string, messageTag?: string, segmentFilters?: any, scheduledAt?: string) =>
     apiCall('broadcast-engine', '/create', { method: 'POST', body: JSON.stringify({ tenant_id: tenantId, brand_id: brandId, name, platform, message_content: messageContent, message_tag: messageTag, segment_filters: segmentFilters, scheduled_at: scheduledAt }) }),
@@ -175,7 +387,6 @@ export const broadcastApi = {
     apiCall('broadcast-engine', `/cancel/${broadcastId}`, { method: 'POST' }),
 };
 
-// ---- API Gateway ----
 export const apiGateway = {
   createKey: (tenantId: string, name: string, permissions?: string[]) =>
     apiCall('api-gateway', '/keys', { method: 'POST', body: JSON.stringify({ tenant_id: tenantId, name, permissions }) }),
@@ -195,7 +406,6 @@ export const apiGateway = {
     fetch(`${SUPABASE_URL}/functions/v1/api-gateway/rate-limits`, { headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' } }).then(r => r.json()),
 };
 
-// ---- Real-time Events ----
 export const realtimeApi = {
   emit: (tenantId: string, brandId: string, eventType: string, title: string, description?: string, userId?: string, actionUrl?: string, metadata?: any) =>
     apiCall('realtime-events', '/emit', { method: 'POST', body: JSON.stringify({ tenant_id: tenantId, brand_id: brandId, user_id: userId, event_type: eventType, title, description, action_url: actionUrl, metadata }) }),

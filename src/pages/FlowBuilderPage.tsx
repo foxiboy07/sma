@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Node, Edge, addEdge, Background, Controls, MiniMap,
   useNodesState, useEdgesState, Connection, BackgroundVariant,
-  NodeTypes, Handle, Position, MarkerType
+  NodeTypes, Handle, Position, MarkerType, useReactFlow, Viewport,
+  ReactFlowProvider
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
@@ -1899,10 +1900,12 @@ function PropertiesPanel({ node, onClose, onSave, onDelete }: PropsPanelProps) {
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function FlowBuilderPage() {
+// Inner component that uses ReactFlow hooks
+function FlowBuilderContent() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { tenant, brand } = useAuth();
+  const { zoomIn, zoomOut, setViewport: setFlowViewport, getViewport } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Record<string, unknown>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -1927,6 +1930,69 @@ export function FlowBuilderPage() {
   const [testInput, setTestInput] = useState('');
   const [testRunning, setTestRunning] = useState(false);
   const [testResults, setTestResults] = useState<null | { steps: { label: string; ok: boolean; detail: string }[] }>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [showMobilePalette, setShowMobilePalette] = useState(false);
+
+  // ── Undo/Redo history ──
+  const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isUndoRedo, setIsUndoRedo] = useState(false);
+
+  // Save to history
+  const saveToHistory = useCallback((newNodes: Node[], newEdges: Edge[]) => {
+    if (isUndoRedo) return;
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push({ nodes: JSON.parse(JSON.stringify(newNodes)), edges: JSON.parse(JSON.stringify(newEdges)) });
+      return newHistory.slice(-50); // Keep last 50 states
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
+  }, [historyIndex, isUndoRedo]);
+
+  // Undo
+  const undo = useCallback(() => {
+    if (historyIndex <= 0) return;
+    setIsUndoRedo(true);
+    const prevState = history[historyIndex - 1];
+    if (prevState) {
+      setNodes(JSON.parse(JSON.stringify(prevState.nodes)));
+      setEdges(JSON.parse(JSON.stringify(prevState.edges)));
+      setHistoryIndex(prev => prev - 1);
+    }
+    setTimeout(() => setIsUndoRedo(false), 50);
+  }, [history, historyIndex, setNodes, setEdges]);
+
+  // Redo
+  const redo = useCallback(() => {
+    if (historyIndex >= history.length - 1) return;
+    setIsUndoRedo(true);
+    const nextState = history[historyIndex + 1];
+    if (nextState) {
+      setNodes(JSON.parse(JSON.stringify(nextState.nodes)));
+      setEdges(JSON.parse(JSON.stringify(nextState.edges)));
+      setHistoryIndex(prev => prev + 1);
+    }
+    setTimeout(() => setIsUndoRedo(false), 50);
+  }, [history, historyIndex, setNodes, setEdges]);
+
+  // Clipboard for copy/paste
+  const [clipboard, setClipboard] = useState<{ nodes: Node[]; edges: Edge[] } | null>(null);
+
+  // Viewport state for zoom sync
+  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
+
+  // ── Save history when nodes/edges change ──
+  useEffect(() => {
+    if (nodes.length === 0 && edges.length === 0) return;
+    saveToHistory(nodes, edges);
+  }, [nodes, edges, saveToHistory]);
+
+  // ── Sync zoom state with viewport ──
+  const handleMoveEnd = useCallback((event: React.SyntheticEvent, newViewport: Viewport) => {
+    setViewport(newViewport);
+    setZoom(newViewport.zoom);
+  }, []);
 
   // ── Load flow from Supabase ──
   useEffect(() => {
@@ -1993,12 +2059,79 @@ export function FlowBuilderPage() {
     load();
   }, [id, tenant, setNodes, setEdges]);
 
-  // ── Ctrl+S shortcut ──
+  // ── Keyboard shortcuts ──
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      const isMod = e.metaKey || e.ctrlKey;
+
+      // Ctrl/Cmd + S: Save
+      if (isMod && e.key === 's') {
         e.preventDefault();
         saveFlow();
+      }
+      // Ctrl/Cmd + Z: Undo
+      else if (isMod && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        undo();
+      }
+      // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y: Redo
+      else if (isMod && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+        e.preventDefault();
+        redo();
+      }
+      // Ctrl/Cmd + C: Copy selected nodes
+      else if (isMod && e.key === 'c' && selectedNode) {
+        e.preventDefault();
+        const selectedNodes = nodes.filter(n => n.id === selectedNode.id);
+        const selectedEdges = edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id);
+        setClipboard({ nodes: JSON.parse(JSON.stringify(selectedNodes)), edges: JSON.parse(JSON.stringify(selectedEdges)) });
+      }
+      // Ctrl/Cmd + V: Paste
+      else if (isMod && e.key === 'v' && clipboard) {
+        e.preventDefault();
+        const offset = 40;
+        const newNodes = clipboard.nodes.map(n => ({
+          ...JSON.parse(JSON.stringify(n)),
+          id: nextNodeId(),
+          position: { x: n.position.x + offset, y: n.position.y + offset },
+          data: { ...n.data, dbId: undefined },
+        }));
+        setNodes(prev => [...prev, ...newNodes]);
+        setSaveState('unsaved');
+      }
+      // Ctrl/Cmd + D: Duplicate selected node
+      else if (isMod && e.key === 'd' && selectedNode) {
+        e.preventDefault();
+        const offset = 40;
+        const newNode = {
+          ...JSON.parse(JSON.stringify(selectedNode)),
+          id: nextNodeId(),
+          position: { x: selectedNode.position.x + offset, y: selectedNode.position.y + offset },
+          data: { ...selectedNode.data, dbId: undefined },
+        };
+        setNodes(prev => [...prev, newNode]);
+        setSaveState('unsaved');
+      }
+      // Delete/Backspace: Delete selected node
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode && !editingName) {
+        // Only if not in an input field
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          handleDeleteNode();
+        }
+      }
+      // ?: Show shortcuts
+      else if (e.key === '?' && !isMod) {
+        setShowShortcuts(prev => !prev);
+      }
+      // Escape: Close panels
+      else if (e.key === 'Escape') {
+        if (showPicker) { setShowPicker(false); setPickerSourceNodeId(null); }
+        else if (selectedNode) setSelectedNode(null);
+        else if (showValidation) setShowValidation(false);
+        else if (showTest) setShowTest(false);
+        else if (showShortcuts) setShowShortcuts(false);
       }
     }
     window.addEventListener('keydown', onKey);
@@ -2351,10 +2484,10 @@ export function FlowBuilderPage() {
       )}
 
       {/* ─── TOP TOOLBAR ─── */}
-      <div className="h-[52px] flex items-center justify-between px-4 bg-[#111318] border-b border-[#1E2130] flex-shrink-0 z-20">
+      <div className="h-[52px] md:h-[56px] flex items-center justify-between px-3 md:px-4 bg-[#111318] border-b border-[#1E2130] flex-shrink-0 z-20">
 
         {/* Left: back + name + status */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <button
             onClick={() => navigate('/flows')}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24] transition-colors flex-shrink-0"
@@ -2369,39 +2502,84 @@ export function FlowBuilderPage() {
               onChange={e => { setFlowName(e.target.value); setSaveState('unsaved'); }}
               onBlur={() => setEditingName(false)}
               onKeyDown={e => { if (e.key === 'Enter') setEditingName(false); }}
-              className="text-sm font-bold text-[#F0F2FF] bg-transparent border-b border-blue-500 outline-none min-w-[120px] max-w-[240px] pb-0.5"
+              className="text-sm font-bold text-[#F0F2FF] bg-transparent border-b border-blue-500 outline-none min-w-[80px] max-w-[140px] md:max-w-[240px] pb-0.5"
             />
           ) : (
             <button
               onClick={() => setEditingName(true)}
-              className="text-sm font-bold text-[#F0F2FF] hover:text-blue-400 transition-colors truncate max-w-[200px] text-left"
+              className="text-sm font-bold text-[#F0F2FF] hover:text-blue-400 transition-colors truncate max-w-[100px] md:max-w-[200px] text-left"
               title="Click to rename"
             >
               {flowName}
             </button>
           )}
 
-          <Badge variant={status === 'ACTIVE' ? 'success' : status === 'PAUSED' ? 'warning' : 'default'}>
+          <Badge variant={status === 'ACTIVE' ? 'success' : status === 'PAUSED' ? 'warning' : 'default'} className="hidden sm:inline-flex">
             {status.charAt(0) + status.slice(1).toLowerCase()}
           </Badge>
         </div>
 
-        {/* Right: controls */}
-        <div className="flex items-center gap-1.5">
+        {/* Right: controls - hidden on mobile, shown on md+ */}
+        <div className="hidden md:flex items-center gap-1.5">
           {/* 24H indicator */}
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-500/8 border border-green-500/15 mr-1">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             <span className="text-[10px] text-green-400 font-bold tracking-wider">24H OK</span>
           </div>
 
-          <button className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24] transition-colors" title="Undo (Ctrl+Z)">
+          {/* Undo/Redo with working state */}
+          <button
+            onClick={undo}
+            disabled={historyIndex <= 0}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${historyIndex > 0 ? 'text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24]' : 'text-[#2A2E42] cursor-not-allowed'}`}
+            title="Undo (Ctrl+Z)"
+          >
             <Undo2 className="w-4 h-4" />
           </button>
-          <button className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24] transition-colors" title="Redo (Ctrl+Shift+Z)">
+          <button
+            onClick={redo}
+            disabled={historyIndex >= history.length - 1}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${historyIndex < history.length - 1 ? 'text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24]' : 'text-[#2A2E42] cursor-not-allowed'}`}
+            title="Redo (Ctrl+Shift+Z)"
+          >
             <Redo2 className="w-4 h-4" />
           </button>
 
+          {/* Zoom controls */}
+          <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-[#0A0B0F] border border-[#2A2E42]">
+            <button
+              onClick={() => { zoomOut(); setZoom(getViewport().zoom); }}
+              className="w-6 h-6 flex items-center justify-center rounded text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24] text-xs font-bold"
+              title="Zoom out"
+            >
+              −
+            </button>
+            <button
+              onClick={() => { setFlowViewport({ x: 0, y: 0, zoom: Math.round(zoom * 100) / 100 }); setZoom(getViewport().zoom); }}
+              className="text-[10px] text-[#8B90A7] font-mono w-8 text-center hover:text-[#F0F2FF] cursor-pointer"
+              title="Reset zoom"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              onClick={() => { zoomIn(); setZoom(getViewport().zoom); }}
+              className="w-6 h-6 flex items-center justify-center rounded text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24] text-xs font-bold"
+              title="Zoom in"
+            >
+              +
+            </button>
+          </div>
+
           <div className="w-px h-5 bg-[#1E2130] mx-1" />
+
+          {/* Shortcuts help */}
+          <button
+            onClick={() => setShowShortcuts(s => !s)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8B90A7] hover:text-[#F0F2FF] hover:bg-[#1A1C24] transition-colors"
+            title="Keyboard shortcuts (?)"
+          >
+            <Settings2 className="w-4 h-4" />
+          </button>
 
           {/* Validation button */}
           <button
@@ -2462,6 +2640,42 @@ export function FlowBuilderPage() {
         </div>
       </div>
 
+      {/* ─── KEYBOARD SHORTCUTS PANEL ─── */}
+      {showShortcuts && (
+        <div className="absolute top-16 right-4 z-30 w-72 bg-[#111318] border border-[#2A2E42] rounded-xl shadow-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-[#F0F2FF]">Keyboard Shortcuts</h3>
+            <button onClick={() => setShowShortcuts(false)} className="text-[#4B5068] hover:text-[#F0F2FF]">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-2 text-xs">
+            {[
+              { keys: ['Ctrl', 'S'], action: 'Save flow' },
+              { keys: ['Ctrl', 'Z'], action: 'Undo' },
+              { keys: ['Ctrl', 'Shift', 'Z'], action: 'Redo' },
+              { keys: ['Ctrl', 'C'], action: 'Copy node' },
+              { keys: ['Ctrl', 'V'], action: 'Paste node' },
+              { keys: ['Ctrl', 'D'], action: 'Duplicate node' },
+              { keys: ['Del'], action: 'Delete selected' },
+              { keys: ['Esc'], action: 'Close panel' },
+              { keys: ['?'], action: 'Toggle shortcuts' },
+            ].map((s, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <span className="text-[#8B90A7]">{s.action}</span>
+                <div className="flex gap-1">
+                  {s.keys.map((k, j) => (
+                    <span key={j} className="px-1.5 py-0.5 rounded bg-[#1A1C24] border border-[#2A2E42] text-[#F0F2FF] font-mono text-[10px]">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ─── VALIDATION TOAST STRIP ─── */}
       {showValidation && (
         <div className={`flex-shrink-0 border-b px-5 py-3 z-10 ${
@@ -2510,6 +2724,7 @@ export function FlowBuilderPage() {
             onNodesChange={changes => { onNodesChange(changes); setSaveState('unsaved'); }}
             onEdgesChange={changes => { onEdgesChange(changes); setSaveState('unsaved'); }}
             onConnect={onConnect}
+            onMoveEnd={handleMoveEnd}
             onNodeClick={(_, node) => {
               // If node is unconfigured, open picker instead of properties
               const isUnconfigured = !node.data?.preview && Object.keys((node.data?.config as Record<string, unknown>) || {}).length === 0;
@@ -2616,6 +2831,55 @@ export function FlowBuilderPage() {
         )}
       </div>
 
+      {/* ─── MOBILE BOTTOM ACTION BAR ─── */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#111318] border-t border-[#1E2130] px-3 py-2 safe-area-bottom">
+        <div className="flex items-center justify-between gap-2">
+          {/* Left: Zoom */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#0A0B0F] border border-[#2A2E42]">
+            <button
+              onClick={() => { zoomOut(); setZoom(getViewport().zoom); }}
+              className="w-7 h-7 flex items-center justify-center rounded text-[#8B90A7] hover:text-[#F0F2FF] text-sm font-bold"
+            >
+              −
+            </button>
+            <span className="text-[10px] text-[#8B90A7] font-mono w-7 text-center">{Math.round(zoom * 100)}%</span>
+            <button
+              onClick={() => { zoomIn(); setZoom(getViewport().zoom); }}
+              className="w-7 h-7 flex items-center justify-center rounded text-[#8B90A7] hover:text-[#F0F2FF] text-sm font-bold"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Center: Save/Publish */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={saveFlow}
+              disabled={saving}
+              className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-[#1A1C24] border border-[#2A2E42] text-xs font-semibold text-[#F0F2FF] disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {saving ? 'Saving' : 'Save'}
+            </button>
+            <button
+              onClick={togglePublish}
+              className={`h-9 px-3 flex items-center gap-1.5 rounded-lg text-xs font-semibold text-white ${status === 'ACTIVE' ? 'bg-amber-500' : 'bg-green-500'}`}
+            >
+              {status === 'ACTIVE' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              {status === 'ACTIVE' ? 'Pause' : 'Publish'}
+            </button>
+          </div>
+
+          {/* Right: Add step */}
+          <button
+            onClick={() => openPicker(nodes.some(n => NODE_CATEGORY[n.data?.nodeType as string] === 'TRIGGER') ? 'action' : 'trigger')}
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-blue-500 text-white"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
       {/* ─── NODE PICKER POPUP ─── */}
       {showPicker && (
         <NodePickerPopup
@@ -2674,5 +2938,14 @@ export function FlowBuilderPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+// Wrap with ReactFlowProvider for hooks to work
+export function FlowBuilderPage() {
+  return (
+    <ReactFlowProvider>
+      <FlowBuilderContent />
+    </ReactFlowProvider>
   );
 }

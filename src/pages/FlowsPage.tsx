@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Grid3X3, Table, MoreVertical, Play, Pause, Copy, Archive, Zap, Clock, Users, DollarSign, GitBranch, Filter, X, AlertCircle, EyeOff, Eye } from 'lucide-react';
 import { Button, Badge, Card, Modal, Input, Select, EmptyState, Skeleton, Dropdown } from '../components/ui';
+import { flowsApi } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Flow, FlowStatus, TriggerType } from '../types';
@@ -55,19 +56,25 @@ export function FlowsPage() {
   const [archiving, setArchiving] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !brand?.id) return;
     const fetchFlows = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('flows')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .order('updated_at', { ascending: false });
-      if (!error && data) setFlows(data as Flow[]);
+      try {
+        const data = await flowsApi.list(brand.id);
+        setFlows((data || []) as Flow[]);
+      } catch {
+        // Fallback to direct query
+        const { data } = await supabase
+          .from('flows')
+          .select('*')
+          .eq('tenant_id', tenant.id)
+          .order('updated_at', { ascending: false });
+        if (data) setFlows(data as Flow[]);
+      }
       setLoading(false);
     };
     fetchFlows();
-  }, [tenant?.id]);
+  }, [tenant?.id, brand?.id]);
 
   const filtered = flows.filter(f => {
     const matchSearch = f.name.toLowerCase().includes(search.toLowerCase());
@@ -87,23 +94,10 @@ export function FlowsPage() {
   async function createFlow() {
     if (!tenant?.id || !brand?.id) return;
     try {
-      const { data, error } = await supabase
-        .from('flows')
-        .insert({
-          tenant_id: tenant.id,
-          brand_id: brand.id,
-          name: newFlow.name,
-          status: 'DRAFT',
-          trigger_type: newFlow.trigger_type,
-          trigger_config: {},
-          ghost_traffic_pct: 0,
-          triggered_count: 0,
-          conversion_count: 0,
-          revenue_attributed: 0,
-        })
-        .select()
-        .single();
-      if (error || !data) throw new Error(error?.message);
+      const data = await flowsApi.create(brand.id, {
+        name: newFlow.name,
+        triggerType: newFlow.trigger_type,
+      });
       const flow = data as Flow;
       setFlows(prev => [flow, ...prev]);
       setShowCreate(false);
@@ -121,11 +115,11 @@ export function FlowsPage() {
     const nextStatus: FlowStatus = flow.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
     setFlows(prev => prev.map(f => f.id === id ? { ...f, status: nextStatus } : f));
     try {
-      const { error } = await supabase
-        .from('flows')
-        .update({ status: nextStatus, updated_at: new Date().toISOString() })
-        .eq('id', id);
-      if (error) throw new Error(error.message);
+      if (nextStatus === 'PAUSED') {
+        await flowsApi.pause(id);
+      } else {
+        await flowsApi.update(id, { status: 'ACTIVE' });
+      }
     } catch (err: any) {
       setFlows(prev => prev.map(f => f.id === id ? { ...f, status: flow.status } : f));
       setActionError(err?.message || 'Failed to update flow status');
@@ -133,60 +127,10 @@ export function FlowsPage() {
   }
 
   async function duplicateFlow(id: string) {
-    const flow = flows.find(f => f.id === id);
-    if (!flow || !tenant?.id || !brand?.id) return;
     setDuplicating(id);
     setActionError(null);
     try {
-      // Duplicate the flow row
-      const { data: newFlowData, error: flowErr } = await supabase
-        .from('flows')
-        .insert({
-          tenant_id: tenant.id,
-          brand_id: brand.id,
-          name: `${flow.name} (Copy)`,
-          status: 'DRAFT',
-          trigger_type: flow.trigger_type,
-          trigger_config: flow.trigger_config,
-          ghost_traffic_pct: 0,
-          triggered_count: 0,
-          conversion_count: 0,
-          revenue_attributed: 0,
-        })
-        .select()
-        .single();
-      if (flowErr || !newFlowData) throw new Error(flowErr?.message);
-
-      // Duplicate flow_nodes
-      const { data: srcNodes } = await supabase
-        .from('flow_nodes')
-        .select('*')
-        .eq('flow_id', id);
-
-      if (srcNodes && srcNodes.length > 0) {
-        const copiedNodes = srcNodes.map(({ id: _id, ...rest }: any) => ({
-          ...rest,
-          flow_id: newFlowData.id,
-          tenant_id: tenant.id,
-        }));
-        await supabase.from('flow_nodes').insert(copiedNodes);
-      }
-
-      // Duplicate flow_edges
-      const { data: srcEdges } = await supabase
-        .from('flow_edges')
-        .select('*')
-        .eq('flow_id', id);
-
-      if (srcEdges && srcEdges.length > 0) {
-        const copiedEdges = srcEdges.map(({ id: _id, ...rest }: any) => ({
-          ...rest,
-          flow_id: newFlowData.id,
-          tenant_id: tenant.id,
-        }));
-        await supabase.from('flow_edges').insert(copiedEdges);
-      }
-
+      const newFlowData = await flowsApi.duplicate(id);
       setFlows(prev => [newFlowData as Flow, ...prev]);
     } catch (err: any) {
       setActionError(err?.message || 'Failed to duplicate flow');
@@ -196,16 +140,10 @@ export function FlowsPage() {
   }
 
   async function archiveFlow(id: string) {
-    const flow = flows.find(f => f.id === id);
-    if (!flow) return;
     setArchiving(id);
     setActionError(null);
     try {
-      const { error } = await supabase
-        .from('flows')
-        .update({ status: 'ARCHIVED', updated_at: new Date().toISOString() })
-        .eq('id', id);
-      if (error) throw new Error(error.message);
+      await flowsApi.archive(id);
       setFlows(prev => prev.map(f => f.id === id ? { ...f, status: 'ARCHIVED' } : f));
     } catch (err: any) {
       setActionError(err?.message || 'Failed to archive flow');
