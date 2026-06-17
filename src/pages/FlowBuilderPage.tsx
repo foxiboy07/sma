@@ -42,6 +42,53 @@ const CAT_COLORS: Record<NodeCategory, string> = {
 };
 
 const NODE_CATEGORY: Record<string, NodeCategory> = {
+  // Instagram Triggers
+  IG_POST_COMMENT:      'TRIGGER',
+  IG_STORY_REPLY:        'TRIGGER',
+  IG_STORY_MENTION:      'TRIGGER',
+  IG_DIRECT_MESSAGE:     'TRIGGER',
+  IG_POST_SHARE:         'TRIGGER',
+  IG_ADS_CLICK:         'TRIGGER',
+  IG_LIVE_COMMENT:      'TRIGGER',
+  IG_REFERRAL_LINK:     'TRIGGER',
+  IG_KEYWORD:           'TRIGGER',
+  // Facebook Triggers
+  FB_POST_COMMENT:      'TRIGGER',
+  FB_DIRECT_MESSAGE:    'TRIGGER',
+  FB_KEYWORD:           'TRIGGER',
+  FB_LEAD_AD:           'TRIGGER',
+  FB_CHECKBOX_PLUGIN:   'TRIGGER',
+  FB_REFERRAL:          'TRIGGER',
+  // TikTok Triggers
+  TT_VIDEO_COMMENT:     'TRIGGER',
+  TT_DIRECT_MESSAGE:    'TRIGGER',
+  TT_LIVE_COMMENT:      'TRIGGER',
+  TT_KEYWORD:           'TRIGGER',
+  TT_SHOP_CLICK:        'TRIGGER',
+  // WhatsApp Triggers
+  WA_MESSAGE:           'TRIGGER',
+  WA_QR_SCAN:           'TRIGGER',
+  WA_CTA_CLICK:         'TRIGGER',
+  WA_TEMPLATE_REPLY:    'TRIGGER',
+  // Contact Triggers
+  CONTACT_CREATED:        'TRIGGER',
+  CONTACT_FIELD_CHANGED:  'TRIGGER',
+  CONTACT_SYSTEM_FIELD:   'TRIGGER',
+  CONTACT_TAG_ADDED:      'TRIGGER',
+  CONTACT_TAG_REMOVED:    'TRIGGER',
+  CONTACT_SEQUENCE_SUB:   'TRIGGER',
+  CONTACT_SEQUENCE_UNSUB:  'TRIGGER',
+  CONTACT_SEGMENT_ENTRY:  'TRIGGER',
+  CONTACT_DATETIME:       'TRIGGER',
+  // System Triggers
+  SYSTEM_SCHEDULED:     'TRIGGER',
+  SYSTEM_WEBHOOK:       'TRIGGER',
+  SYSTEM_API:           'TRIGGER',
+  SYSTEM_SHOPIFY:       'TRIGGER',
+  SYSTEM_STRIPE:        'TRIGGER',
+  SYSTEM_ZAPIER:        'TRIGGER',
+  SYSTEM_MANUAL:        'TRIGGER',
+  // Legacy Triggers
   COMMENT_TO_DM:         'TRIGGER',
   STORY_MENTION:         'TRIGGER',
   STORY_REPLY:           'TRIGGER',
@@ -50,18 +97,39 @@ const NODE_CATEGORY: Record<string, NodeCategory> = {
   TIKTOK_COMMENT_TO_DM:  'TRIGGER',
   DEEPLINK_BIO_CLICK:    'TRIGGER',
   MANUAL:                'TRIGGER',
+  // Messages
   SEND_MESSAGE:          'MESSAGE',
   SEND_DM_CARD:          'MESSAGE',
+  SEND_CAROUSEL:         'MESSAGE',
+  SEND_PRODUCT:          'MESSAGE',
+  SEND_TEMPLATE:         'MESSAGE',
+  SEND_QUIZ:            'MESSAGE',
   TIKTOK_SHOP_PRODUCT:   'MESSAGE',
   COLLECT_INPUT:         'MESSAGE',
+  // Logic
   CONDITION:             'LOGIC',
   SUPER_RANDOMIZER:      'LOGIC',
   SMART_DELAY:           'LOGIC',
   FRICTION_RECOVERY:     'LOGIC',
+  // AI
   AI_STEP:               'AI',
   CUSTOM_CODE:           'AI',
+  // Contact Actions
+  ACTION_ADD_TAG:        'INTEGRATION',
+  ACTION_REMOVE_TAG:     'INTEGRATION',
+  ACTION_SET_FIELD:      'INTEGRATION',
+  ACTION_INCREMENT_FIELD: 'INTEGRATION',
+  ACTION_ADD_SEQUENCE:   'INTEGRATION',
+  ACTION_REMOVE_SEQUENCE: 'INTEGRATION',
+  ACTION_UPDATE_SEGMENT: 'INTEGRATION',
+  ACTION_CLEAR_FIELD:    'INTEGRATION',
+  ACTION_NOTIFY:         'INTEGRATION',
+  // System Actions
   ACTION_BLOCK:          'INTEGRATION',
   OUTBOUND_WEBHOOK:      'INTEGRATION',
+  ACTION_GOOGLE_SHEETS:  'INTEGRATION',
+  ACTION_SHOPIFY:        'INTEGRATION',
+  ACTION_STRIPE:         'INTEGRATION',
 };
 
 const NODE_COLOR = (type: string): string => {
@@ -70,6 +138,53 @@ const NODE_COLOR = (type: string): string => {
 };
 
 const NODE_ICONS: Record<string, React.ReactNode> = {
+  // Instagram Triggers
+  IG_POST_COMMENT:      <MessageCircle className="w-3.5 h-3.5" />,
+  IG_STORY_REPLY:        <Share2 className="w-3.5 h-3.5" />,
+  IG_STORY_MENTION:      <AtSign className="w-3.5 h-3.5" />,
+  IG_DIRECT_MESSAGE:     <Send className="w-3.5 h-3.5" />,
+  IG_POST_SHARE:         <Share2 className="w-3.5 h-3.5" />,
+  IG_ADS_CLICK:         <Megaphone className="w-3.5 h-3.5" />,
+  IG_LIVE_COMMENT:      <Video className="w-3.5 h-3.5" />,
+  IG_REFERRAL_LINK:     <Link2 className="w-3.5 h-3.5" />,
+  IG_KEYWORD:           <Search className="w-3.5 h-3.5" />,
+  // Facebook Triggers
+  FB_POST_COMMENT:      <MessageCircle className="w-3.5 h-3.5" />,
+  FB_DIRECT_MESSAGE:    <Send className="w-3.5 h-3.5" />,
+  FB_KEYWORD:           <Search className="w-3.5 h-3.5" />,
+  FB_LEAD_AD:           <Database className="w-3.5 h-3.5" />,
+  FB_CHECKBOX_PLUGIN:   <ToggleLeft className="w-3.5 h-3.5" />,
+  FB_REFERRAL:          <Link2 className="w-3.5 h-3.5" />,
+  // TikTok Triggers
+  TT_VIDEO_COMMENT:     <MessageCircle className="w-3.5 h-3.5" />,
+  TT_DIRECT_MESSAGE:    <Send className="w-3.5 h-3.5" />,
+  TT_LIVE_COMMENT:      <Video className="w-3.5 h-3.5" />,
+  TT_KEYWORD:           <Search className="w-3.5 h-3.5" />,
+  TT_SHOP_CLICK:        <ShoppingBag className="w-3.5 h-3.5" />,
+  // WhatsApp Triggers
+  WA_MESSAGE:           <MessageCircle className="w-3.5 h-3.5" />,
+  WA_QR_SCAN:           <QrCode className="w-3.5 h-3.5" />,
+  WA_CTA_CLICK:         <MousePointer className="w-3.5 h-3.5" />,
+  WA_TEMPLATE_REPLY:    <FileSpreadsheet className="w-3.5 h-3.5" />,
+  // Contact Triggers
+  CONTACT_CREATED:        <UserPlus className="w-3.5 h-3.5" />,
+  CONTACT_FIELD_CHANGED:  <Variable className="w-3.5 h-3.5" />,
+  CONTACT_SYSTEM_FIELD:   <Settings2 className="w-3.5 h-3.5" />,
+  CONTACT_TAG_ADDED:      <Tag className="w-3.5 h-3.5" />,
+  CONTACT_TAG_REMOVED:    <Tag className="w-3.5 h-3.5" />,
+  CONTACT_SEQUENCE_SUB:   <Repeat className="w-3.5 h-3.5" />,
+  CONTACT_SEQUENCE_UNSUB: <Repeat className="w-3.5 h-3.5" />,
+  CONTACT_SEGMENT_ENTRY:  <Layers className="w-3.5 h-3.5" />,
+  CONTACT_DATETIME:       <Calendar className="w-3.5 h-3.5" />,
+  // System Triggers
+  SYSTEM_SCHEDULED:     <Calendar className="w-3.5 h-3.5" />,
+  SYSTEM_WEBHOOK:       <Webhook className="w-3.5 h-3.5" />,
+  SYSTEM_API:           <Code2 className="w-3.5 h-3.5" />,
+  SYSTEM_SHOPIFY:       <ShoppingCart className="w-3.5 h-3.5" />,
+  SYSTEM_STRIPE:        <CreditCard className="w-3.5 h-3.5" />,
+  SYSTEM_ZAPIER:        <Zap className="w-3.5 h-3.5" />,
+  SYSTEM_MANUAL:        <MousePointerClick className="w-3.5 h-3.5" />,
+  // Legacy triggers
   COMMENT_TO_DM:        <MessageSquare className="w-3.5 h-3.5" />,
   STORY_MENTION:        <Layers className="w-3.5 h-3.5" />,
   STORY_REPLY:          <Share2 className="w-3.5 h-3.5" />,
@@ -78,21 +193,88 @@ const NODE_ICONS: Record<string, React.ReactNode> = {
   TIKTOK_COMMENT_TO_DM: <Hash className="w-3.5 h-3.5" />,
   DEEPLINK_BIO_CLICK:   <Link2 className="w-3.5 h-3.5" />,
   MANUAL:               <MousePointerClick className="w-3.5 h-3.5" />,
+  // Actions
   SEND_MESSAGE:         <MessageSquare className="w-3.5 h-3.5" />,
   SEND_DM_CARD:         <CreditCard className="w-3.5 h-3.5" />,
+  SEND_CAROUSEL:        <Layers className="w-3.5 h-3.5" />,
+  SEND_PRODUCT:         <ShoppingBag className="w-3.5 h-3.5" />,
+  SEND_TEMPLATE:        <FileSpreadsheet className="w-3.5 h-3.5" />,
+  SEND_QUIZ:           <MessageSquare className="w-3.5 h-3.5" />,
   TIKTOK_SHOP_PRODUCT:  <ShoppingBag className="w-3.5 h-3.5" />,
   COLLECT_INPUT:        <ToggleLeft className="w-3.5 h-3.5" />,
+  // Logic & AI
   CONDITION:            <GitBranch className="w-3.5 h-3.5" />,
   SUPER_RANDOMIZER:     <SlidersHorizontal className="w-3.5 h-3.5" />,
   SMART_DELAY:          <Clock className="w-3.5 h-3.5" />,
   FRICTION_RECOVERY:    <RefreshCw className="w-3.5 h-3.5" />,
   AI_STEP:              <Brain className="w-3.5 h-3.5" />,
   CUSTOM_CODE:          <Code2 className="w-3.5 h-3.5" />,
+  // Contact Actions
+  ACTION_ADD_TAG:       <Tag className="w-3.5 h-3.5" />,
+  ACTION_REMOVE_TAG:    <Tag className="w-3.5 h-3.5" />,
+  ACTION_SET_FIELD:     <Variable className="w-3.5 h-3.5" />,
+  ACTION_INCREMENT_FIELD: <TrendingUp className="w-3.5 h-3.5" />,
+  ACTION_ADD_SEQUENCE:  <Repeat className="w-3.5 h-3.5" />,
+  ACTION_REMOVE_SEQUENCE: <Repeat className="w-3.5 h-3.5" />,
+  ACTION_UPDATE_SEGMENT: <Layers className="w-3.5 h-3.5" />,
+  ACTION_CLEAR_FIELD:   <X className="w-3.5 h-3.5" />,
+  ACTION_NOTIFY:        <Bell className="w-3.5 h-3.5" />,
+  // System Actions
   ACTION_BLOCK:         <Settings2 className="w-3.5 h-3.5" />,
   OUTBOUND_WEBHOOK:     <Webhook className="w-3.5 h-3.5" />,
+  ACTION_GOOGLE_SHEETS: <FileSpreadsheet className="w-3.5 h-3.5" />,
+  ACTION_SHOPIFY:       <ShoppingCart className="w-3.5 h-3.5" />,
+  ACTION_STRIPE:        <CreditCard className="w-3.5 h-3.5" />,
 };
 
 const NODE_LABELS: Record<string, string> = {
+  // Instagram Triggers
+  IG_POST_COMMENT:      'Post/Reel Comment',
+  IG_STORY_REPLY:        'Story Reply',
+  IG_STORY_MENTION:      'Story Mention',
+  IG_DIRECT_MESSAGE:     'Instagram DM',
+  IG_POST_SHARE:        'Post/Reel Share',
+  IG_ADS_CLICK:         'Instagram Ads',
+  IG_LIVE_COMMENT:      'Live Comments',
+  IG_REFERRAL_LINK:     'Referral Link',
+  IG_KEYWORD:           'Keyword Trigger',
+  // Facebook Triggers
+  FB_POST_COMMENT:      'FB Post Comment',
+  FB_DIRECT_MESSAGE:    'FB Message',
+  FB_KEYWORD:           'FB Keyword',
+  FB_LEAD_AD:           'Lead Ad',
+  FB_CHECKBOX_PLUGIN:   'Checkbox Plugin',
+  FB_REFERRAL:          'FB Referral',
+  // TikTok Triggers
+  TT_VIDEO_COMMENT:     'Video Comment',
+  TT_DIRECT_MESSAGE:    'TikTok DM',
+  TT_LIVE_COMMENT:      'Live Comment',
+  TT_KEYWORD:           'TikTok Keyword',
+  TT_SHOP_CLICK:        'Shop Click',
+  // WhatsApp Triggers
+  WA_MESSAGE:           'WhatsApp Message',
+  WA_QR_SCAN:           'QR Scan',
+  WA_CTA_CLICK:         'CTA Click',
+  WA_TEMPLATE_REPLY:    'Template Reply',
+  // Contact Triggers
+  CONTACT_CREATED:        'New Contact',
+  CONTACT_FIELD_CHANGED:  'Field Changed',
+  CONTACT_SYSTEM_FIELD:   'System Field Changed',
+  CONTACT_TAG_ADDED:      'Tag Applied',
+  CONTACT_TAG_REMOVED:    'Tag Removed',
+  CONTACT_SEQUENCE_SUB:   'Sequence Subscribed',
+  CONTACT_SEQUENCE_UNSUB: 'Sequence Unsubscribed',
+  CONTACT_SEGMENT_ENTRY:  'Segment Entry',
+  CONTACT_DATETIME:       'Date/Time Trigger',
+  // System Triggers
+  SYSTEM_SCHEDULED:     'Scheduled Time',
+  SYSTEM_WEBHOOK:       'Webhook',
+  SYSTEM_API:           'API Trigger',
+  SYSTEM_SHOPIFY:       'Shopify Event',
+  SYSTEM_STRIPE:        'Stripe Event',
+  SYSTEM_ZAPIER:        'Zapier Trigger',
+  SYSTEM_MANUAL:        'Manual Trigger',
+  // Legacy triggers (for backwards compatibility)
   COMMENT_TO_DM:        'Comment Trigger',
   STORY_MENTION:        'Story Mention',
   STORY_REPLY:          'Story Reply',
@@ -101,18 +283,38 @@ const NODE_LABELS: Record<string, string> = {
   TIKTOK_COMMENT_TO_DM: 'TikTok Comment',
   DEEPLINK_BIO_CLICK:   'Bio Link Click',
   MANUAL:               'Manual Trigger',
+  // Actions
   SEND_MESSAGE:         'Send Message',
   SEND_DM_CARD:         'Send DM Card',
+  SEND_CAROUSEL:        'Send Carousel',
+  SEND_PRODUCT:         'Send Product Card',
+  SEND_TEMPLATE:        'Send Template',
+  SEND_QUIZ:           'Send Quiz',
   TIKTOK_SHOP_PRODUCT:  'Send Product Card',
   COLLECT_INPUT:        'Collect User Input',
+  // Logic & AI
   CONDITION:            'Condition',
   SUPER_RANDOMIZER:     'A/B Split',
   SMART_DELAY:          'Smart Delay',
   FRICTION_RECOVERY:    'Friction Recovery',
   AI_STEP:              'AI Step',
   CUSTOM_CODE:          'Custom Code',
+  // Contact Actions
+  ACTION_ADD_TAG:       'Add Tag',
+  ACTION_REMOVE_TAG:    'Remove Tag',
+  ACTION_SET_FIELD:     'Set Field',
+  ACTION_INCREMENT_FIELD: 'Increment Field',
+  ACTION_ADD_SEQUENCE:  'Add to Sequence',
+  ACTION_REMOVE_SEQUENCE: 'Remove from Sequence',
+  ACTION_UPDATE_SEGMENT: 'Update Segment',
+  ACTION_CLEAR_FIELD:   'Clear Field',
+  ACTION_NOTIFY:        'Notify Team',
+  // System Actions
   ACTION_BLOCK:         'Action Block',
-  OUTBOUND_WEBHOOK:     'Outbound Webhook',
+  OUTBOUND_WEBHOOK:     'Webhook',
+  ACTION_GOOGLE_SHEETS: 'Google Sheets',
+  ACTION_SHOPIFY:       'Shopify Action',
+  ACTION_STRIPE:        'Stripe Action',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,6 +330,7 @@ interface PickerOption {
   description: string;
   icon: React.ReactNode;
   pro?: boolean;
+  new?: boolean;
   color: string;
 }
 
@@ -156,72 +359,112 @@ const ACTION_CHANNELS: PickerChannelGroup[] = [
   { id: 'system',     label: 'System',     icon: <Wrench className="w-4 h-4" />,   color: '#F59E0B' },
 ];
 
+// Comprehensive trigger options matching market leaders
 const TRIGGER_OPTIONS: Record<PickerChannel, PickerOption[]> = {
   instagram: [
-    { type: 'COMMENT_TO_DM',      label: 'Comment Reply',     description: 'Comment on post triggers DM', icon: <MessageCircle className="w-4 h-4" />,  color: '#E1306C' },
-    { type: 'STORY_MENTION',       label: 'Story Mention',    description: 'User mentions you in story',  icon: <AtSign className="w-4 h-4" />,         color: '#E1306C' },
-    { type: 'STORY_REPLY',         label: 'Story Reply',      description: 'User replies to your story',  icon: <Share2 className="w-4 h-4" />,         color: '#E1306C' },
-    { type: 'DEEPLINK_BIO_CLICK',  label: 'Bio Link Click',   description: 'Deeplink in bio clicked',     icon: <Link2 className="w-4 h-4" />,          color: '#E1306C' },
+    { type: 'IG_POST_COMMENT',    label: 'Post or Reel Comments', description: 'User comments on your Post or Reel', icon: <MessageCircle className="w-4 h-4" />,  color: '#E1306C' },
+    { type: 'IG_STORY_REPLY',     label: 'Story Reply',           description: 'User replies to your Story',       icon: <Share2 className="w-4 h-4" />,         color: '#E1306C' },
+    { type: 'IG_STORY_MENTION',   label: 'Story Mention',        description: 'User mentions you in story',      icon: <AtSign className="w-4 h-4" />,         color: '#E1306C' },
+    { type: 'IG_DIRECT_MESSAGE', label: 'Instagram Message',     description: 'User sends a direct message',       icon: <Send className="w-4 h-4" />,          color: '#E1306C' },
+    { type: 'IG_POST_SHARE',      label: 'Post or Reel Share',   description: 'User shares your Post or Reel as Story', icon: <Share2 className="w-4 h-4" />, color: '#E1306C', new: true },
+    { type: 'IG_ADS_CLICK',       label: 'Instagram Ads',        description: 'User clicks an Instagram Ad',       icon: <Megaphone className="w-4 h-4" />,     color: '#E1306C', pro: true },
+    { type: 'IG_LIVE_COMMENT',    label: 'Live Comments',        description: 'User comments on your Live',        icon: <Video className="w-4 h-4" />,        color: '#E1306C' },
+    { type: 'IG_REFERRAL_LINK',   label: 'Instagram Ref URL',    description: 'User clicks a referral link',       icon: <Link2 className="w-4 h-4" />,        color: '#E1306C' },
+    { type: 'IG_KEYWORD',         label: 'Keyword Trigger',      description: 'Specific keyword in comment/message', icon: <Search className="w-4 h-4" />,     color: '#E1306C' },
   ],
   facebook: [
-    { type: 'COMMENT_TO_DM',      label: 'Keyword',          description: 'Keyword in message triggers DM', icon: <Search className="w-4 h-4" />,     color: '#1877F2' },
-    { type: 'FOLLOW_TO_DM',        label: 'Post Comment',     description: 'Comment on page post',           icon: <MessageCircle className="w-4 h-4" />, color: '#1877F2' },
-    { type: 'MANUAL',              label: 'Lead Ad',          description: 'Lead ad form submission',        icon: <Database className="w-4 h-4" />,      color: '#1877F2' },
-    { type: 'MANUAL',              label: 'Checkbox Plugin',  description: 'Checkbox plugin opt-in',        icon: <ToggleLeft className="w-4 h-4" />,    color: '#1877F2' },
+    { type: 'FB_POST_COMMENT',    label: 'Post Comment',         description: 'User comments on page post',         icon: <MessageCircle className="w-4 h-4" />, color: '#1877F2' },
+    { type: 'FB_DIRECT_MESSAGE', label: 'Facebook Message',      description: 'User sends a message',               icon: <Send className="w-4 h-4" />,          color: '#1877F2' },
+    { type: 'FB_KEYWORD',         label: 'Keyword',              description: 'Keyword in message triggers flow',   icon: <Search className="w-4 h-4" />,        color: '#1877F2' },
+    { type: 'FB_LEAD_AD',         label: 'Lead Ad',              description: 'Lead ad form submission',            icon: <Database className="w-4 h-4" />,       color: '#1877F2', pro: true },
+    { type: 'FB_CHECKBOX_PLUGIN', label: 'Checkbox Plugin',      description: 'Checkbox plugin opt-in',             icon: <ToggleLeft className="w-4 h-4" />,    color: '#1877F2' },
+    { type: 'FB_REFERRAL',        label: 'Facebook Referral',    description: 'User comes from referral link',     icon: <Link2 className="w-4 h-4" />,        color: '#1877F2' },
   ],
   tiktok: [
-    { type: 'TIKTOK_COMMENT_TO_DM', label: 'Comment DM',     description: 'TikTok comment triggers DM',   icon: <MessageCircle className="w-4 h-4" />,  color: '#00F2EA' },
-    { type: 'TIKTOK_COMMENT_TO_DM', label: 'Video Comment',  description: 'Comment on TikTok video',      icon: <Video className="w-4 h-4" />,           color: '#00F2EA' },
+    { type: 'TT_VIDEO_COMMENT',   label: 'Video Comment',        description: 'User comments on TikTok video',      icon: <MessageCircle className="w-4 h-4" />,  color: '#00F2EA' },
+    { type: 'TT_DIRECT_MESSAGE',  label: 'TikTok Message',       description: 'User sends a TikTok DM',           icon: <Send className="w-4 h-4" />,          color: '#00F2EA', new: true },
+    { type: 'TT_LIVE_COMMENT',    label: 'Live Comment',        description: 'User comments during live',          icon: <Video className="w-4 h-4" />,        color: '#00F2EA' },
+    { type: 'TT_KEYWORD',         label: 'Keyword Trigger',     description: 'Specific keyword in comments',       icon: <Search className="w-4 h-4" />,       color: '#00F2EA' },
+    { type: 'TT_SHOP_CLICK',      label: 'Shop Click',           description: 'User clicks TikTok Shop link',      icon: <ShoppingBag className="w-4 h-4" />,   color: '#00F2EA' },
   ],
   whatsapp: [
-    { type: 'MANUAL',              label: 'Incoming Message', description: 'WhatsApp message received',   icon: <MessageCircle className="w-4 h-4" />, color: '#25D366' },
-    { type: 'MANUAL',              label: 'QR Scan',          description: 'WhatsApp QR code scanned',     icon: <QrCode className="w-4 h-4" />,        color: '#25D366' },
-    { type: 'MANUAL',              label: 'CTA Click',        description: 'Click-to-WhatsApp ad',        icon: <MousePointer className="w-4 h-4" />,  color: '#25D366' },
+    { type: 'WA_MESSAGE',         label: 'Incoming Message',    description: 'WhatsApp message received',         icon: <MessageCircle className="w-4 h-4" />, color: '#25D366' },
+    { type: 'WA_QR_SCAN',         label: 'QR Scan',             description: 'WhatsApp QR code scanned',           icon: <QrCode className="w-4 h-4" />,        color: '#25D366' },
+    { type: 'WA_CTA_CLICK',       label: 'CTA Click',            description: 'Click-to-WhatsApp ad click',        icon: <MousePointer className="w-4 h-4" />,  color: '#25D366' },
+    { type: 'WA_TEMPLATE_REPLY',  label: 'Template Reply',      description: 'User replies to template message',   icon: <FileSpreadsheet className="w-4 h-4" />,color: '#25D366' },
   ],
   contact: [
-    { type: 'MANUAL',              label: 'New Contact',      description: 'New contact created',          icon: <UserPlus className="w-4 h-4" />,       color: '#8B5CF6' },
-    { type: 'ACTION_BLOCK',        label: 'Tag Added',        description: 'Tag added to contact',         icon: <Tag className="w-4 h-4" />,            color: '#8B5CF6' },
-    { type: 'ACTION_BLOCK',        label: 'Field Updated',    description: 'Contact field changed',        icon: <Variable className="w-4 h-4" />,       color: '#8B5CF6' },
-    { type: 'ACTION_BLOCK',        label: 'Segment Entry',    description: 'Contact enters segment',       icon: <Layers className="w-4 h-4" />,         color: '#8B5CF6' },
+    { type: 'CONTACT_CREATED',    label: 'New Contact',         description: 'New contact created',                icon: <UserPlus className="w-4 h-4" />,       color: '#8B5CF6' },
+    { type: 'CONTACT_FIELD_CHANGED', label: 'Custom Field Changed', description: 'Custom field value is changed',    icon: <Variable className="w-4 h-4" />,      color: '#8B5CF6', pro: true },
+    { type: 'CONTACT_SYSTEM_FIELD', label: 'System Field Changed', description: 'System field value is changed',    icon: <Settings2 className="w-4 h-4" />,     color: '#8B5CF6', pro: true },
+    { type: 'CONTACT_TAG_ADDED',  label: 'Tag Applied',         description: 'Tag is applied to a contact',        icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6', pro: true },
+    { type: 'CONTACT_TAG_REMOVED', label: 'Tag Removed',         description: 'Tag is removed from a contact',      icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6', pro: true },
+    { type: 'CONTACT_SEQUENCE_SUB', label: 'Sequence Subscribed', description: 'Contact subscribed to a sequence',  icon: <Repeat className="w-4 h-4" />,       color: '#8B5CF6', pro: true },
+    { type: 'CONTACT_SEQUENCE_UNSUB', label: 'Sequence Unsubscribed', description: 'Contact unsubscribed from sequence', icon: <UserPlus className="w-4 h-4" />,  color: '#8B5CF6', pro: true },
+    { type: 'CONTACT_SEGMENT_ENTRY', label: 'Segment Entry',    description: 'Contact enters a segment',          icon: <Layers className="w-4 h-4" />,        color: '#8B5CF6' },
+    { type: 'CONTACT_DATETIME',   label: 'Date/Time Occurred',    description: 'Specific date/time reached',         icon: <Calendar className="w-4 h-4" />,      color: '#8B5CF6', pro: true },
   ],
   system: [
-    { type: 'MANUAL',              label: 'Scheduled Time',   description: 'Run flow on schedule',         icon: <Calendar className="w-4 h-4" />,       color: '#F59E0B' },
-    { type: 'OUTBOUND_WEBHOOK',    label: 'Webhook',          description: 'Incoming webhook trigger',     icon: <Webhook className="w-4 h-4" />,        color: '#F59E0B', pro: true },
-    { type: 'OUTBOUND_WEBHOOK',    label: 'Shopify Event',    description: 'Shopify order/event trigger',  icon: <ShoppingCart className="w-4 h-4" />,   color: '#F59E0B', pro: true },
-    { type: 'OUTBOUND_WEBHOOK',    label: 'API Call',         description: 'External API trigger',         icon: <Code2 className="w-4 h-4" />,          color: '#F59E0B', pro: true },
+    { type: 'SYSTEM_SCHEDULED',   label: 'Scheduled Time',       description: 'Run flow on a schedule',             icon: <Calendar className="w-4 h-4" />,      color: '#F59E0B' },
+    { type: 'SYSTEM_WEBHOOK',     label: 'Incoming Webhook',    description: 'External webhook trigger',          icon: <Webhook className="w-4 h-4" />,       color: '#F59E0B', pro: true },
+    { type: 'SYSTEM_API',         label: 'API Trigger',         description: 'Trigger via REST API',              icon: <Code2 className="w-4 h-4" />,          color: '#F59E0B', pro: true },
+    { type: 'SYSTEM_SHOPIFY',     label: 'Shopify Event',       description: 'Shopify order/event trigger',        icon: <ShoppingCart className="w-4 h-4" />,   color: '#F59E0B', pro: true },
+    { type: 'SYSTEM_STRIPE',      label: 'Stripe Event',        description: 'Stripe payment event trigger',      icon: <CreditCard className="w-4 h-4" />,    color: '#F59E0B', pro: true },
+    { type: 'SYSTEM_ZAPIER',      label: 'Zapier Trigger',      description: 'Trigger from Zapier workflow',      icon: <Zap className="w-4 h-4" />,           color: '#F59E0B', pro: true },
+    { type: 'SYSTEM_MANUAL',      label: 'Manual Trigger',      description: 'Manually start flow for contact',   icon: <MousePointerClick className="w-4 h-4" />, color: '#F59E0B' },
   ],
 };
 
+// Comprehensive action options matching market leaders
 const ACTION_OPTIONS: Record<PickerChannel, PickerOption[]> = {
   instagram: [
-    { type: 'SEND_MESSAGE',   label: 'Send Message',    description: 'Text + quick replies',      icon: <Send className="w-4 h-4" />,           color: '#E1306C' },
-    { type: 'SEND_DM_CARD',   label: 'Send DM Card',    description: 'Rich card with buttons',    icon: <CreditCard className="w-4 h-4" />,     color: '#E1306C' },
-    { type: 'COLLECT_INPUT',  label: 'Collect Input',   description: 'Ask question, store reply', icon: <ToggleLeft className="w-4 h-4" />,     color: '#E1306C' },
+    { type: 'SEND_MESSAGE',       label: 'Send Message',        description: 'Text message with quick replies',   icon: <Send className="w-4 h-4" />,           color: '#E1306C' },
+    { type: 'SEND_DM_CARD',       label: 'Send DM Card',        description: 'Rich card with image & buttons',    icon: <CreditCard className="w-4 h-4" />,     color: '#E1306C' },
+    { type: 'SEND_CAROUSEL',      label: 'Send Carousel',       description: 'Multiple cards in one message',     icon: <Layers className="w-4 h-4" />,        color: '#E1306C', pro: true },
+    { type: 'COLLECT_INPUT',      label: 'Collect User Input',  description: 'Ask question, store reply',          icon: <ToggleLeft className="w-4 h-4" />,    color: '#E1306C' },
+    { type: 'SEND_PRODUCT',       label: 'Send Product Card',   description: 'Showcase product in DM',            icon: <ShoppingBag className="w-4 h-4" />,    color: '#E1306C' },
+    { type: 'SEND_QUIZ',          label: 'Send Quiz/Poll',      description: 'Interactive quiz in message',       icon: <MessageSquare className="w-4 h-4" />, color: '#E1306C', new: true },
   ],
   facebook: [
-    { type: 'SEND_MESSAGE',   label: 'Send Message',    description: 'Text + quick replies',      icon: <Send className="w-4 h-4" />,           color: '#1877F2' },
-    { type: 'SEND_DM_CARD',   label: 'Send DM Card',    description: 'Rich card with buttons',    icon: <CreditCard className="w-4 h-4" />,     color: '#1877F2' },
-    { type: 'COLLECT_INPUT',  label: 'Collect Input',   description: 'Ask question, store reply', icon: <ToggleLeft className="w-4 h-4" />,     color: '#1877F2' },
+    { type: 'SEND_MESSAGE',      label: 'Send Message',        description: 'Text message with quick replies',   icon: <Send className="w-4 h-4" />,           color: '#1877F2' },
+    { type: 'SEND_DM_CARD',      label: 'Send Card',           description: 'Rich card with image & buttons',     icon: <CreditCard className="w-4 h-4" />,     color: '#1877F2' },
+    { type: 'COLLECT_INPUT',     label: 'Collect User Input',  description: 'Ask question, store reply',          icon: <ToggleLeft className="w-4 h-4" />,    color: '#1877F2' },
+    { type: 'SEND_PRODUCT',      label: 'Send Product Card',   description: 'Product showcase in message',       icon: <ShoppingBag className="w-4 h-4" />,    color: '#1877F2' },
   ],
   tiktok: [
-    { type: 'SEND_MESSAGE',        label: 'Send Message',     description: 'Text + quick replies',   icon: <Send className="w-4 h-4" />,             color: '#00F2EA' },
-    { type: 'TIKTOK_SHOP_PRODUCT', label: 'Product Card',     description: 'TikTok Shop product',    icon: <ShoppingBag className="w-4 h-4" />,      color: '#00F2EA' },
+    { type: 'SEND_MESSAGE',        label: 'Send Message',       description: 'Text message to TikTok DM',         icon: <Send className="w-4 h-4" />,            color: '#00F2EA' },
+    { type: 'TIKTOK_SHOP_PRODUCT',  label: 'Product Card',       description: 'TikTok Shop product showcase',      icon: <ShoppingBag className="w-4 h-4" />,     color: '#00F2EA' },
+    { type: 'SEND_DM_CARD',         label: 'Send Card',          description: 'Rich card with buttons',             icon: <CreditCard className="w-4 h-4" />,      color: '#00F2EA' },
+    { type: 'COLLECT_INPUT',        label: 'Collect User Input', description: 'Ask question, store reply',          icon: <ToggleLeft className="w-4 h-4" />,     color: '#00F2EA' },
   ],
   whatsapp: [
-    { type: 'SEND_MESSAGE',   label: 'Send Message',    description: 'WhatsApp text message',     icon: <Send className="w-4 h-4" />,          color: '#25D366' },
-    { type: 'SEND_DM_CARD',   label: 'Send Template',   description: 'WhatsApp template message', icon: <FileSpreadsheet className="w-4 h-4" />,color: '#25D366' },
+    { type: 'SEND_MESSAGE',      label: 'Send Message',        description: 'WhatsApp text message',             icon: <Send className="w-4 h-4" />,          color: '#25D366' },
+    { type: 'SEND_TEMPLATE',     label: 'Send Template',       description: 'WhatsApp approved template',        icon: <FileSpreadsheet className="w-4 h-4" />,color: '#25D366' },
+    { type: 'SEND_DM_CARD',      label: 'Send Card',           description: 'Rich card message',                 icon: <CreditCard className="w-4 h-4" />,     color: '#25D366' },
+    { type: 'COLLECT_INPUT',     label: 'Collect User Input',  description: 'Ask question, store reply',          icon: <ToggleLeft className="w-4 h-4" />,    color: '#25D366' },
   ],
   contact: [
-    { type: 'ACTION_BLOCK',  label: 'Add Tag',          description: 'Tag the contact',            icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6' },
-    { type: 'ACTION_BLOCK',  label: 'Set Field',        description: 'Set contact field value',    icon: <Variable className="w-4 h-4" />,      color: '#8B5CF6' },
-    { type: 'ACTION_BLOCK',  label: 'Add to Sequence',  description: 'Enroll in sequence',         icon: <Repeat className="w-4 h-4" />,        color: '#8B5CF6' },
-    { type: 'ACTION_BLOCK',  label: 'Remove Tag',       description: 'Remove a tag',               icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6' },
+    { type: 'ACTION_ADD_TAG',        label: 'Add Tag',            description: 'Apply a tag to contact',            icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6' },
+    { type: 'ACTION_REMOVE_TAG',     label: 'Remove Tag',         description: 'Remove a tag from contact',         icon: <Tag className="w-4 h-4" />,           color: '#8B5CF6' },
+    { type: 'ACTION_SET_FIELD',      label: 'Set Custom Field',   description: 'Set contact field value',          icon: <Variable className="w-4 h-4" />,      color: '#8B5CF6' },
+    { type: 'ACTION_INCREMENT_FIELD', label: 'Increment Field',    description: 'Add to a numeric field',            icon: <TrendingUp className="w-4 h-4" />,    color: '#8B5CF6' },
+    { type: 'ACTION_ADD_SEQUENCE',  label: 'Subscribe to Sequence', description: 'Enroll in automation sequence',  icon: <Repeat className="w-4 h-4" />,        color: '#8B5CF6' },
+    { type: 'ACTION_REMOVE_SEQUENCE', label: 'Unsubscribe from Sequence', description: 'Remove from sequence',        icon: <Repeat className="w-4 h-4" />,        color: '#8B5CF6' },
+    { type: 'ACTION_UPDATE_SEGMENT', label: 'Update Segment',     description: 'Add/remove from segment',           icon: <Layers className="w-4 h-4" />,        color: '#8B5CF6' },
+    { type: 'ACTION_CLEAR_FIELD',    label: 'Clear Field',       description: 'Clear a contact field',              icon: <X className="w-4 h-4" />,              color: '#8B5CF6' },
   ],
   system: [
-    { type: 'OUTBOUND_WEBHOOK', label: 'Webhook',       description: 'Send HTTP request',          icon: <Webhook className="w-4 h-4" />,       color: '#F59E0B' },
-    { type: 'OUTBOUND_WEBHOOK', label: 'Google Sheets',  description: 'Add row to spreadsheet',    icon: <FileSpreadsheet className="w-4 h-4" />,color: '#F59E0B' },
-    { type: 'SMART_DELAY',      label: 'Delay',          description: 'Wait before next step',      icon: <Timer className="w-4 h-4" />,         color: '#F59E0B' },
-    { type: 'ACTION_BLOCK',    label: 'Notify Team',    description: 'Alert team via email/Slack', icon: <Bell className="w-4 h-4" />,          color: '#F59E0B', pro: true },
+    { type: 'OUTBOUND_WEBHOOK',  label: 'Send Webhook',        description: 'Send HTTP request to external API', icon: <Webhook className="w-4 h-4" />,       color: '#F59E0B' },
+    { type: 'ACTION_GOOGLE_SHEETS', label: 'Google Sheets',    description: 'Add row to spreadsheet',           icon: <FileSpreadsheet className="w-4 h-4" />,color: '#F59E0B' },
+    { type: 'SMART_DELAY',      label: 'Delay',               description: 'Wait before next step',              icon: <Timer className="w-4 h-4" />,         color: '#F59E0B' },
+    { type: 'ACTION_NOTIFY',    label: 'Notify Team',         description: 'Alert team via email/Slack',        icon: <Bell className="w-4 h-4" />,         color: '#F59E0B', pro: true },
+    { type: 'AI_STEP',          label: 'AI Response',         description: 'AI-powered response with KB',        icon: <Brain className="w-4 h-4" />,         color: '#14B8A6' },
+    { type: 'CUSTOM_CODE',      label: 'Run Custom Code',     description: 'Execute JavaScript',                icon: <Code2 className="w-4 h-4" />,          color: '#14B8A6' },
+    { type: 'CONDITION',        label: 'Condition/Branch',    description: 'Branch flow based on conditions',    icon: <GitBranch className="w-4 h-4" />,      color: '#F59E0B' },
+    { type: 'SUPER_RANDOMIZER', label: 'A/B Split',           description: 'Split traffic by percentage',        icon: <SlidersHorizontal className="w-4 h-4" />, color: '#F59E0B' },
+    { type: 'FRICTION_RECOVERY', label: 'Friction Recovery',   description: 'Retry on failure',                   icon: <RefreshCw className="w-4 h-4" />,      color: '#F59E0B' },
+    { type: 'ACTION_SHOPIFY',   label: 'Shopify Action',      description: 'Create order, update customer',      icon: <ShoppingCart className="w-4 h-4" />,   color: '#F59E0B', pro: true },
+    { type: 'ACTION_STRIPE',    label: 'Stripe Action',        description: 'Create charge, update customer',    icon: <CreditCard className="w-4 h-4" />,    color: '#F59E0B', pro: true },
   ],
 };
 
@@ -429,8 +672,8 @@ function NodePickerPopup({ mode, position, onClose, onSelect }: NodePickerPopupP
   );
 }
 
-function OptionCard({ option, onClick }: { option: PickerOption | { type: string; label: string; description: string; icon: React.ReactNode; color: string; pro?: boolean }; onClick: () => void }) {
-  const { type, label, description, icon, color, pro } = option;
+function OptionCard({ option, onClick }: { option: PickerOption | { type: string; label: string; description: string; icon: React.ReactNode; color: string; pro?: boolean; new?: boolean }; onClick: () => void }) {
+  const { type, label, description, icon, color, pro, new: isNew } = option;
   return (
     <button
       onClick={onClick}
@@ -443,10 +686,15 @@ function OptionCard({ option, onClick }: { option: PickerOption | { type: string
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <p className="text-xs font-semibold text-[#F0F2FF] group-hover:text-white truncate transition-colors">
             {label}
           </p>
+          {isNew && (
+            <span className="flex-shrink-0 px-1.5 py-0 rounded text-[8px] font-black tracking-wider bg-green-500/15 text-green-400 border border-green-500/20">
+              NEW
+            </span>
+          )}
           {pro && (
             <span className="flex-shrink-0 px-1.5 py-0 rounded text-[8px] font-black tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/20">
               PRO
@@ -1031,18 +1279,54 @@ function PropertiesPanel({ node, onClose, onSave, onDelete }: PropsPanelProps) {
                 <div>
                   <FieldLabel>Trigger Type</FieldLabel>
                   <StyledSelect value={triggerType} onChange={e => setTriggerType(e.target.value)}>
-                    <option value="COMMENT_TO_DM">Comment → DM</option>
-                    <option value="STORY_MENTION">Story Mention</option>
-                    <option value="STORY_REPLY">Story Reply</option>
-                    <option value="FOLLOW_TO_DM">Follow → DM</option>
-                    <option value="SHARE_TO_DM">Share → DM</option>
-                    <option value="TIKTOK_COMMENT_TO_DM">TikTok Comment → DM</option>
-                    <option value="DEEPLINK_BIO_CLICK">Bio Link Click</option>
-                    <option value="MANUAL">Manual</option>
+                    <optgroup label="Instagram">
+                      <option value="IG_POST_COMMENT">Post/Reel Comment</option>
+                      <option value="IG_STORY_REPLY">Story Reply</option>
+                      <option value="IG_STORY_MENTION">Story Mention</option>
+                      <option value="IG_DIRECT_MESSAGE">Instagram DM</option>
+                      <option value="IG_POST_SHARE">Post/Reel Share</option>
+                      <option value="IG_LIVE_COMMENT">Live Comments</option>
+                      <option value="IG_KEYWORD">Keyword Trigger</option>
+                    </optgroup>
+                    <optgroup label="Facebook">
+                      <option value="FB_POST_COMMENT">Post Comment</option>
+                      <option value="FB_DIRECT_MESSAGE">Facebook Message</option>
+                      <option value="FB_KEYWORD">Keyword</option>
+                    </optgroup>
+                    <optgroup label="TikTok">
+                      <option value="TT_VIDEO_COMMENT">Video Comment</option>
+                      <option value="TT_DIRECT_MESSAGE">TikTok DM</option>
+                      <option value="TT_LIVE_COMMENT">Live Comment</option>
+                    </optgroup>
+                    <optgroup label="WhatsApp">
+                      <option value="WA_MESSAGE">Incoming Message</option>
+                      <option value="WA_QR_SCAN">QR Scan</option>
+                    </optgroup>
+                    <optgroup label="Contact">
+                      <option value="CONTACT_CREATED">New Contact</option>
+                      <option value="CONTACT_TAG_ADDED">Tag Applied</option>
+                      <option value="CONTACT_FIELD_CHANGED">Field Changed</option>
+                      <option value="CONTACT_SEGMENT_ENTRY">Segment Entry</option>
+                    </optgroup>
+                    <optgroup label="System">
+                      <option value="SYSTEM_SCHEDULED">Scheduled Time</option>
+                      <option value="SYSTEM_WEBHOOK">Incoming Webhook</option>
+                      <option value="SYSTEM_MANUAL">Manual Trigger</option>
+                    </optgroup>
+                    <optgroup label="Legacy">
+                      <option value="COMMENT_TO_DM">Comment → DM</option>
+                      <option value="STORY_MENTION">Story Mention</option>
+                      <option value="MANUAL">Manual</option>
+                    </optgroup>
                   </StyledSelect>
                 </div>
 
-                {(triggerType === 'COMMENT_TO_DM' || triggerType === 'TIKTOK_COMMENT_TO_DM') && (
+                {/* Keyword configuration for comment/keyword triggers */}
+                {(triggerType.startsWith('IG_') && triggerType.includes('COMMENT') ||
+                  triggerType.startsWith('TT_') && triggerType.includes('COMMENT') ||
+                  triggerType.startsWith('FB_') && triggerType.includes('COMMENT') ||
+                  triggerType.includes('KEYWORD') ||
+                  triggerType === 'COMMENT_TO_DM') && (
                   <div>
                     <FieldLabel>Keywords <span className="text-[#4B5068] normal-case font-normal">(any match triggers flow)</span></FieldLabel>
                     <ChipInput
@@ -1060,6 +1344,59 @@ function PropertiesPanel({ node, onClose, onSave, onDelete }: PropsPanelProps) {
                         size="sm"
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Scheduled time configuration */}
+                {(triggerType === 'SYSTEM_SCHEDULED' || triggerType === 'CONTACT_DATETIME') && (
+                  <div className="space-y-2">
+                    <div>
+                      <FieldLabel>Schedule Type</FieldLabel>
+                      <StyledSelect>
+                        <option>One-time</option>
+                        <option>Daily</option>
+                        <option>Weekly</option>
+                        <option>Monthly</option>
+                      </StyledSelect>
+                    </div>
+                    <div>
+                      <FieldLabel>Run At</FieldLabel>
+                      <StyledInput type="time" />
+                    </div>
+                    <InfoBox>
+                      Scheduled triggers will run automatically at the specified time for all matching contacts.
+                    </InfoBox>
+                  </div>
+                )}
+
+                {/* Contact event configuration */}
+                {triggerType.startsWith('CONTACT_') && (
+                  <div className="space-y-2">
+                    {triggerType === 'CONTACT_FIELD_CHANGED' && (
+                      <div>
+                        <FieldLabel>Watch Field</FieldLabel>
+                        <StyledSelect>
+                          <option>Any custom field</option>
+                          <option>email</option>
+                          <option>phone</option>
+                          <option>loyalty_score</option>
+                        </StyledSelect>
+                      </div>
+                    )}
+                    {triggerType === 'CONTACT_TAG_ADDED' && (
+                      <div>
+                        <FieldLabel>Tag to Watch</FieldLabel>
+                        <StyledInput placeholder="e.g. vip, purchased" />
+                      </div>
+                    )}
+                    {triggerType === 'CONTACT_SEGMENT_ENTRY' && (
+                      <div>
+                        <FieldLabel>Segment</FieldLabel>
+                        <StyledSelect>
+                          <option>All segments</option>
+                        </StyledSelect>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1089,6 +1426,7 @@ function PropertiesPanel({ node, onClose, onSave, onDelete }: PropsPanelProps) {
                     <option value="INSTAGRAM">Instagram</option>
                     <option value="FACEBOOK">Facebook</option>
                     <option value="TIKTOK">TikTok</option>
+                    <option value="WHATSAPP">WhatsApp</option>
                   </StyledSelect>
                 </div>
               </div>
@@ -1098,7 +1436,7 @@ function PropertiesPanel({ node, onClose, onSave, onDelete }: PropsPanelProps) {
           {/* ════════════════════════════════════
               SEND MESSAGE CONFIG
           ════════════════════════════════════ */}
-          {type === 'SEND_MESSAGE' && (
+          {(type === 'SEND_MESSAGE' || type === 'SEND_TEMPLATE' || type === 'SEND_PRODUCT') && (
             <>
               <PanelSection title="Message Content">
                 <div>
@@ -2197,7 +2535,7 @@ function FlowBuilderContent() {
       posY = 80;
     }
 
-    setNodes(prev => [...prev, {
+    const newNode: Node = {
       id: rfId,
       type: 'flowNode',
       position: { x: posX, y: posY },
@@ -2208,7 +2546,9 @@ function FlowBuilderContent() {
         config: {},
         onPlusClick: (nodeId: string) => openPicker('action', nodeId),
       },
-    }]);
+    };
+
+    setNodes(prev => [...prev, newNode]);
 
     // Auto-connect if adding from a + connector
     if (pickerSourceNodeId) {
@@ -2246,6 +2586,11 @@ function FlowBuilderContent() {
     setShowMobilePalette(false);
     setShowPicker(false);
     setPickerSourceNodeId(null);
+
+    // Select the new node to open configuration panel
+    setTimeout(() => {
+      setSelectedNode(newNode);
+    }, 50);
   }
 
   function openPicker(mode: PickerMode, sourceNodeId?: string | null) {
