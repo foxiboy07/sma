@@ -18,7 +18,8 @@ import {
   Instagram, Facebook, Video, Phone, Users, Wrench,
   Calendar, FileSpreadsheet, Bell, MessageCircle, AtSign,
   UserPlus, QrCode, MousePointer, ShoppingCart, Search,
-  Star, Timer, Repeat, Shield, Database, Mail
+  Star, Timer, Repeat, Shield, Database, Mail, TrendingUp,
+  Megaphone
 } from 'lucide-react';
 import { Button, Badge, Toggle, Modal } from '../components/ui';
 import { supabase } from '../lib/supabase';
@@ -330,7 +331,7 @@ interface PickerOption {
   description: string;
   icon: React.ReactNode;
   pro?: boolean;
-  new?: boolean;
+  isNew?: boolean;
   color: string;
 }
 
@@ -366,7 +367,7 @@ const TRIGGER_OPTIONS: Record<PickerChannel, PickerOption[]> = {
     { type: 'IG_STORY_REPLY',     label: 'Story Reply',           description: 'User replies to your Story',       icon: <Share2 className="w-4 h-4" />,         color: '#E1306C' },
     { type: 'IG_STORY_MENTION',   label: 'Story Mention',        description: 'User mentions you in story',      icon: <AtSign className="w-4 h-4" />,         color: '#E1306C' },
     { type: 'IG_DIRECT_MESSAGE', label: 'Instagram Message',     description: 'User sends a direct message',       icon: <Send className="w-4 h-4" />,          color: '#E1306C' },
-    { type: 'IG_POST_SHARE',      label: 'Post or Reel Share',   description: 'User shares your Post or Reel as Story', icon: <Share2 className="w-4 h-4" />, color: '#E1306C', new: true },
+    { type: 'IG_POST_SHARE',      label: 'Post or Reel Share',   description: 'User shares your Post or Reel as Story', icon: <Share2 className="w-4 h-4" />, color: '#E1306C', isNew: true },
     { type: 'IG_ADS_CLICK',       label: 'Instagram Ads',        description: 'User clicks an Instagram Ad',       icon: <Megaphone className="w-4 h-4" />,     color: '#E1306C', pro: true },
     { type: 'IG_LIVE_COMMENT',    label: 'Live Comments',        description: 'User comments on your Live',        icon: <Video className="w-4 h-4" />,        color: '#E1306C' },
     { type: 'IG_REFERRAL_LINK',   label: 'Instagram Ref URL',    description: 'User clicks a referral link',       icon: <Link2 className="w-4 h-4" />,        color: '#E1306C' },
@@ -382,7 +383,7 @@ const TRIGGER_OPTIONS: Record<PickerChannel, PickerOption[]> = {
   ],
   tiktok: [
     { type: 'TT_VIDEO_COMMENT',   label: 'Video Comment',        description: 'User comments on TikTok video',      icon: <MessageCircle className="w-4 h-4" />,  color: '#00F2EA' },
-    { type: 'TT_DIRECT_MESSAGE',  label: 'TikTok Message',       description: 'User sends a TikTok DM',           icon: <Send className="w-4 h-4" />,          color: '#00F2EA', new: true },
+    { type: 'TT_DIRECT_MESSAGE',  label: 'TikTok Message',       description: 'User sends a TikTok DM',           icon: <Send className="w-4 h-4" />,          color: '#00F2EA', isNew: true },
     { type: 'TT_LIVE_COMMENT',    label: 'Live Comment',        description: 'User comments during live',          icon: <Video className="w-4 h-4" />,        color: '#00F2EA' },
     { type: 'TT_KEYWORD',         label: 'Keyword Trigger',     description: 'Specific keyword in comments',       icon: <Search className="w-4 h-4" />,       color: '#00F2EA' },
     { type: 'TT_SHOP_CLICK',      label: 'Shop Click',           description: 'User clicks TikTok Shop link',      icon: <ShoppingBag className="w-4 h-4" />,   color: '#00F2EA' },
@@ -423,7 +424,7 @@ const ACTION_OPTIONS: Record<PickerChannel, PickerOption[]> = {
     { type: 'SEND_CAROUSEL',      label: 'Send Carousel',       description: 'Multiple cards in one message',     icon: <Layers className="w-4 h-4" />,        color: '#E1306C', pro: true },
     { type: 'COLLECT_INPUT',      label: 'Collect User Input',  description: 'Ask question, store reply',          icon: <ToggleLeft className="w-4 h-4" />,    color: '#E1306C' },
     { type: 'SEND_PRODUCT',       label: 'Send Product Card',   description: 'Showcase product in DM',            icon: <ShoppingBag className="w-4 h-4" />,    color: '#E1306C' },
-    { type: 'SEND_QUIZ',          label: 'Send Quiz/Poll',      description: 'Interactive quiz in message',       icon: <MessageSquare className="w-4 h-4" />, color: '#E1306C', new: true },
+    { type: 'SEND_QUIZ',          label: 'Send Quiz/Poll',      description: 'Interactive quiz in message',       icon: <MessageSquare className="w-4 h-4" />, color: '#E1306C', isNew: true },
   ],
   facebook: [
     { type: 'SEND_MESSAGE',      label: 'Send Message',        description: 'Text message with quick replies',   icon: <Send className="w-4 h-4" />,           color: '#1877F2' },
@@ -672,8 +673,8 @@ function NodePickerPopup({ mode, position, onClose, onSelect }: NodePickerPopupP
   );
 }
 
-function OptionCard({ option, onClick }: { option: PickerOption | { type: string; label: string; description: string; icon: React.ReactNode; color: string; pro?: boolean; new?: boolean }; onClick: () => void }) {
-  const { type, label, description, icon, color, pro, new: isNew } = option;
+function OptionCard({ option, onClick }: { option: PickerOption | { type: string; label: string; description: string; icon: React.ReactNode; color: string; pro?: boolean; isNew?: boolean }; onClick: () => void }) {
+  const { type, label, description, icon, color, pro, isNew } = option;
   return (
     <button
       onClick={onClick}
